@@ -1,1 +1,0 @@
-run.py --data_path water_level_all3.csv --segment_col segment_id --model DLinear --features S --enc_in 1 --input_col HL02 --target HL01 --seq_len 30 --label_len 30 --pred_len 15 --dlinear_kernel_size 49 --train_epochs 30 --batch_size 64 --patience 7 --learning_rate 0.007 --lradj 4

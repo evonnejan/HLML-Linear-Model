@@ -1,1 +1,0 @@
-run.py --model Linear --features S --enc_in 1 --input_col HL02 --target HL01 --train_epochs 1 --batch_size 64
