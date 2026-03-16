@@ -1,0 +1,1 @@
+run.py --model DLinear --features S --enc_in 1 --input_col HL02 --target HL01 --dlinear_kernel_size 7 --train_epochs 30 --batch_size 64 --patience 3 --learning_rate 0.0007
