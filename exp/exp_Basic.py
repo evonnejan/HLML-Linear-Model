@@ -14,13 +14,31 @@ class Exp_Basic(object):
         return None
 
     def _acquire_device(self):
-        if self.args.use_gpu:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(
-                self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
-            device = torch.device('cuda:{}'.format(self.args.gpu))
-            print('Use GPU: cuda:{}'.format(self.args.gpu))
+        use_gpu = bool(getattr(self.args, 'use_gpu', False))
+        use_multi_gpu = bool(getattr(self.args, 'use_multi_gpu', False))
+
+        if use_gpu and torch.cuda.is_available():
+            if use_multi_gpu:
+                devices = getattr(self.args, 'devices', str(getattr(self.args, 'gpu', 0)))
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(devices)
+            else:
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(getattr(self.args, 'gpu', 0))
+
+            gpu_id = int(getattr(self.args, 'gpu', 0))
+            device = torch.device(f'cuda:{gpu_id}')
+            print(f'Use GPU: cuda:{gpu_id}')
+            return device
+
+        mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+        if use_gpu and mps_available:
+            device = torch.device('mps')
+            print('Use GPU: mps')
+            return device
+
+        device = torch.device('cpu')
+        if use_gpu and not torch.cuda.is_available() and not mps_available:
+            print('GPU requested but CUDA/MPS unavailable, fallback to CPU')
         else:
-            device = torch.device('cpu')
             print('Use CPU')
         return device
 

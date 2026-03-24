@@ -1,7 +1,7 @@
 from data_provider.Data_Factory import data_provider
 from exp.exp_Basic import Exp_Basic
 # from models import Informer, Autoformer, Transformer, DLinear, Linear, NLinear
-from models import DLinear, Linear, NLinear
+from models import DLinear, DLinearMix, Linear, NLinear
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
@@ -13,16 +13,83 @@ from torch import optim
 
 import os, time, csv
 from datetime import datetime
+import json
+import importlib
+from pathlib import Path
 
 import warnings
 import matplotlib.pyplot as plt
-import numpy as np
+
+try:
+    tqdm = importlib.import_module('tqdm').tqdm
+except Exception:
+    tqdm = None
 
 warnings.filterwarnings('ignore')
 
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
+        self.use_amp = bool(getattr(self.args, 'use_amp', False) and self.device.type == 'cuda')
+        if getattr(self.args, 'use_amp', False) and not self.use_amp:
+            print('AMP is enabled only on CUDA; running without AMP on current device')
+
+    def _checkpoint_dir(self):
+        if hasattr(self.args, 'run_dir'):
+            path = os.path.join(self.args.run_dir, 'checkpoints')
+        else:
+            path = os.path.join(self.args.checkpoints, self.args.setting if hasattr(self.args, 'setting') else '')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _outputs_dir(self):
+        if hasattr(self.args, 'run_dir'):
+            path = os.path.join(self.args.run_dir, 'outputs')
+        else:
+            path = os.path.join('./results', self.args.setting if hasattr(self.args, 'setting') else '')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _plots_dir(self):
+        if hasattr(self.args, 'run_dir'):
+            path = os.path.join(self.args.run_dir, 'plots')
+        else:
+            path = os.path.join('./test_results', self.args.setting if hasattr(self.args, 'setting') else '')
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _plot_segment_horizon_case(self, points_df, segment, horizon, out_path, title):
+        part = points_df[(points_df['segment'] == segment) & (points_df['horizon'] == horizon)].copy()
+        if len(part) == 0:
+            return
+
+        part = part.sort_values('target_time')
+        x = pd.to_datetime(part['target_time'])
+
+        plt.figure(figsize=(12, 4.5))
+        plt.plot(x, part['true'].to_numpy(dtype=float), label='GroundTruth', linewidth=2)
+        plt.plot(x, part['pred'].to_numpy(dtype=float), label='Prediction', linewidth=2)
+        plt.title(title)
+        plt.xlabel('Target Time')
+        plt.ylabel('Value')
+        plt.grid(True, alpha=0.2)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=180)
+        plt.close()
+
+    def _plot_ranked_cases(self, points_df, rank_df, metric_name, ascending, top_k, out_dir, prefix):
+        if len(rank_df) == 0:
+            return
+
+        used = rank_df.dropna(subset=[metric_name]).sort_values(metric_name, ascending=ascending).head(top_k)
+        for idx, row in enumerate(used.itertuples(index=False), start=1):
+            metric_val = getattr(row, metric_name)
+            segment_val = getattr(row, 'segment')
+            horizon_val = int(getattr(row, 'horizon'))
+            title = f"{prefix} #{idx}: segment={segment_val}, horizon=t+{horizon_val}, {metric_name}={metric_val:.4f}"
+            out_path = os.path.join(out_dir, f"{prefix.lower()}_{idx:02d}_seg-{segment_val}_h-{horizon_val}.png")
+            self._plot_segment_horizon_case(points_df, segment_val, horizon_val, out_path, title)
 
     def _build_model(self):
         model_dict = {
@@ -30,13 +97,16 @@ class Exp_Main(Exp_Basic):
             # 'Transformer': Transformer,
             # 'Informer': Informer,
             'DLinear': DLinear,
+            'DLinearMix': DLinearMix,
             'NLinear': NLinear,
             'Linear': Linear,
         }
         model = model_dict[self.args.model].Model(self.args).float()
 
-        if self.args.use_multi_gpu and self.args.use_gpu:
-            model = nn.DataParallel(model, device_ids=self.args.device_ids)
+        if self.args.use_multi_gpu and self.device.type == 'cuda':
+            devices_text = str(getattr(self.args, 'devices', str(getattr(self.args, 'gpu', 0))))
+            device_ids = [int(item.strip()) for item in devices_text.split(',') if item.strip() != '']
+            model = nn.DataParallel(model, device_ids=device_ids)
         return model
 
     def _get_data(self, flag):
@@ -66,7 +136,7 @@ class Exp_Main(Exp_Basic):
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
-                if self.args.use_amp:
+                if self.use_amp:
                     with torch.cuda.amp.autocast():
                         if 'Linear' in self.args.model:
                             outputs = self.model(batch_x)
@@ -103,9 +173,7 @@ class Exp_Main(Exp_Basic):
             vali_data, vali_loader = self._get_data(flag='val')
             test_data, test_loader = self._get_data(flag='test')
 
-        path = os.path.join(self.args.checkpoints, setting)
-        if not os.path.exists(path):
-            os.makedirs(path)
+        path = self._checkpoint_dir()
 
         time_now = time.time()
 
@@ -115,7 +183,7 @@ class Exp_Main(Exp_Basic):
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
 
-        if self.args.use_amp:
+        if self.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
         epochs_trained = 0
@@ -126,7 +194,14 @@ class Exp_Main(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+            train_iter = tqdm(
+                train_loader,
+                total=len(train_loader),
+                desc=f"Train {epoch + 1}/{self.args.train_epochs}",
+                leave=False
+            ) if tqdm is not None else train_loader
+
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_iter):
                 iter_count += 1
                 model_optim.zero_grad()
                 batch_x = batch_x.float().to(self.device)
@@ -140,7 +215,7 @@ class Exp_Main(Exp_Basic):
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
                 # encoder - decoder
-                if self.args.use_amp:
+                if self.use_amp:
                     with torch.cuda.amp.autocast():
                         if 'Linear' in self.args.model:
                             outputs = self.model(batch_x)
@@ -179,7 +254,10 @@ class Exp_Main(Exp_Basic):
                     iter_count = 0
                     time_now = time.time()
 
-                if self.args.use_amp:
+                if tqdm is not None and hasattr(train_iter, 'set_postfix'):
+                    train_iter.set_postfix(loss=f"{loss.item():.5f}")
+
+                if self.use_amp:
                     scaler.scale(loss).backward()
                     scaler.step(model_optim)
                     scaler.update()
@@ -207,7 +285,7 @@ class Exp_Main(Exp_Basic):
 
             adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-        best_model_path = path + '/' + 'checkpoint.pth'
+        best_model_path = os.path.join(path, 'checkpoint.pth')
         self.model.load_state_dict(torch.load(best_model_path))
 
         self.epochs_trained = epochs_trained
@@ -219,18 +297,20 @@ class Exp_Main(Exp_Basic):
         
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            self.model.load_state_dict(torch.load(os.path.join(self._checkpoint_dir(), 'checkpoint.pth')))
 
         preds = []
         trues = []
         inputx = []
-        folder_path = './test_results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        segment_ids_all = []
+        sample_ptr = 0
+        plots_dir = None
+        save_test_plots = bool(getattr(self.args, 'save_test_plots', False))
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+            test_iter = tqdm(test_loader, total=len(test_loader), desc='Test', leave=False) if tqdm is not None else test_loader
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_iter):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
@@ -241,7 +321,7 @@ class Exp_Main(Exp_Basic):
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
-                if self.args.use_amp:
+                if self.use_amp:
                     with torch.cuda.amp.autocast():
                         if 'Linear' in self.args.model:
                             outputs = self.model(batch_x)
@@ -273,7 +353,15 @@ class Exp_Main(Exp_Basic):
                 preds.append(pred)
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
-                if i % 20 == 0:
+
+                batch_size_now = pred.shape[0]
+                if hasattr(test_data, 'window_segment_ids') and test_data.window_segment_ids is not None:
+                    segment_ids_all.append(test_data.window_segment_ids[sample_ptr:sample_ptr + batch_size_now])
+                sample_ptr += batch_size_now
+
+                if save_test_plots and i % 20 == 0:
+                    if plots_dir is None:
+                        plots_dir = self._plots_dir()
                     # 取第一筆樣本做示意圖
                     x0 = batch_x.detach().cpu().numpy()[0]
                     y_true0 = true[0]
@@ -308,15 +396,15 @@ class Exp_Main(Exp_Basic):
                     if x_col != y_col:
                         title = f"{self.args.model} | {y_col} | {str(x_time[0])} ~ {str(x_time[-1])}"
                         visual(y_true0_inv, y_pred0_inv,
-                            os.path.join(folder_path, f"{i}_future.png"),
+                            os.path.join(plots_dir, f"{i}_future.png"),
                             x=x_time, title=title)
                     else:
                         # HL01 -> HL01（同欄位）才畫 history+future（可選）
                         title = f"{self.args.model} | {y_col} | {str(test_data.dates[s_begin])}"
                         gt = np.concatenate((test_data.y_raw[s_begin:s_begin+self.args.seq_len], y_true_raw), axis=0)
-                        pd = np.concatenate((test_data.y_raw[s_begin:s_begin+self.args.seq_len], y_pred0_inv), axis=0)
+                        pred_line = np.concatenate((test_data.y_raw[s_begin:s_begin+self.args.seq_len], y_pred0_inv), axis=0)
                         x_all = test_data.dates[s_begin:s_begin+self.args.seq_len+self.args.pred_len]
-                        visual(gt, pd, os.path.join(folder_path, f"{i}.png"), x=x_all, title=title)
+                        visual(gt, pred_line, os.path.join(plots_dir, f"{i}.png"), x=x_all, title=title)
                         
         if self.args.test_flop:
             test_params_flop((batch_x.shape[1],batch_x.shape[2]))
@@ -334,15 +422,159 @@ class Exp_Main(Exp_Basic):
             trues = test_data.inverse_transform(trues.reshape(-1, shape_preds[-1])).reshape(shape_preds)
 
         # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        outputs_dir = self._outputs_dir()
 
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
         print('mse:{}, mae:{}'.format(mse, mae))
-        csv_path = os.path.join(os.getcwd(), "results_summary.csv")
+
+        sq_err = np.square(preds - trues)
+        if sq_err.ndim == 3:
+            horizon_mse = sq_err.mean(axis=(0, 2))
+        else:
+            horizon_mse = sq_err.mean(axis=0)
+
+        pd.DataFrame({
+            'horizon': np.arange(1, len(horizon_mse) + 1, dtype=np.int64),
+            'mse': horizon_mse.astype(float)
+        }).to_csv(os.path.join(outputs_dir, 'mse_horizon.csv'), index=False, encoding='utf-8-sig')
+
+        plt.figure(figsize=(8, 4))
+        plt.plot(np.arange(1, len(horizon_mse) + 1), horizon_mse, marker='o')
+        plt.xlabel('Horizon (t+k)')
+        plt.ylabel('MSE')
+        plt.title('Horizon-wise MSE')
+        plt.grid(True, alpha=0.25)
+        plt.tight_layout()
+        plt.savefig(os.path.join(outputs_dir, 'mse_horizon.png'), dpi=180)
+        plt.close()
+
+        has_segment_metrics = False
+        segment_combined_rows = []
+        points_df = None
+        if len(segment_ids_all) > 0:
+            segment_ids = np.concatenate(segment_ids_all, axis=0)
+            if len(segment_ids) == preds.shape[0]:
+                has_segment_metrics = True
+                segment_rows = []
+                segment_horizon_rows = []
+
+                if preds.ndim == 3 and preds.shape[2] == 1:
+                    pred_viz = preds[:, :, 0]
+                    true_viz = trues[:, :, 0]
+                elif preds.ndim == 3:
+                    pred_viz = preds.mean(axis=2)
+                    true_viz = trues.mean(axis=2)
+                else:
+                    pred_viz = preds
+                    true_viz = trues
+
+                start_indices = test_data.valid_starts if test_data.valid_starts is not None else np.arange(pred_viz.shape[0], dtype=np.int64)
+                points_rows = []
+
+                for seg_id in pd.unique(segment_ids):
+                    mask = (segment_ids == seg_id)
+                    seg_sq_err = sq_err[mask]
+                    seg_overall = {
+                        'segment': seg_id,
+                        'num_windows': int(mask.sum()),
+                        'horizon': 'all',
+                        'mse': float(seg_sq_err.mean())
+                    }
+                    segment_rows.append(seg_overall)
+                    segment_combined_rows.append(seg_overall)
+
+                    if seg_sq_err.ndim == 3:
+                        seg_horizon_mse = seg_sq_err.mean(axis=(0, 2))
+                    else:
+                        seg_horizon_mse = seg_sq_err.mean(axis=0)
+
+                    for horizon_idx, horizon_val in enumerate(seg_horizon_mse, start=1):
+                        row_item = {
+                            'segment': seg_id,
+                            'horizon': int(horizon_idx),
+                            'mse': float(horizon_val)
+                        }
+                        segment_horizon_rows.append(row_item)
+                        segment_combined_rows.append(row_item)
+
+                    seg_window_indices = np.where(mask)[0]
+                    for local_idx in seg_window_indices:
+                        s_begin = int(start_indices[local_idx])
+                        for horizon_idx in range(self.args.pred_len):
+                            t_idx = s_begin + self.args.seq_len + horizon_idx
+                            if t_idx >= len(test_data.dates):
+                                continue
+                            y_t = float(true_viz[local_idx, horizon_idx])
+                            y_p = float(pred_viz[local_idx, horizon_idx])
+                            points_rows.append({
+                                'segment': seg_id,
+                                'window_idx': int(local_idx),
+                                'horizon': int(horizon_idx + 1),
+                                'target_time': pd.to_datetime(test_data.dates[t_idx]).strftime('%Y-%m-%d %H:%M:%S'),
+                                'true': y_t,
+                                'pred': y_p,
+                                'abs_err': abs(y_t - y_p),
+                                'sq_err': (y_t - y_p) ** 2
+                            })
+
+                pd.DataFrame(segment_combined_rows).to_csv(
+                    os.path.join(outputs_dir, 'mse_segment_combined.csv'),
+                    index=False,
+                    encoding='utf-8-sig'
+                )
+
+                points_df = pd.DataFrame(points_rows)
+
+                rank_rows = []
+                grouped = points_df.groupby(['segment', 'horizon'])
+                for (seg_id, horizon_id), grp in grouped:
+                    true_arr = grp['true'].to_numpy(dtype=float)
+                    pred_arr = grp['pred'].to_numpy(dtype=float)
+                    if len(true_arr) >= 2:
+                        corr_val = float(np.corrcoef(true_arr, pred_arr)[0, 1])
+                    else:
+                        corr_val = np.nan
+                    mse_val = float(np.mean((pred_arr - true_arr) ** 2))
+                    rank_rows.append({
+                        'segment': seg_id,
+                        'horizon': int(horizon_id),
+                        'num_points': int(len(grp)),
+                        'mse': mse_val,
+                        'corr': corr_val
+                    })
+
+                rank_df = pd.DataFrame(rank_rows).sort_values(['mse', 'corr'], ascending=[True, False])
+                rank_df.to_csv(
+                    os.path.join(outputs_dir, 'segment_horizon_rank.csv'),
+                    index=False,
+                    encoding='utf-8-sig'
+                )
+
+                points_df.to_csv(
+                    os.path.join(outputs_dir, 'segment_horizon_points.csv.gz'),
+                    index=False,
+                    encoding='utf-8-sig',
+                    compression='gzip'
+                )
+
+                meeting_rows = []
+                meeting_rows.extend(rank_df.dropna(subset=['mse']).sort_values('mse', ascending=True).head(50).assign(category='best_mse').to_dict(orient='records'))
+                meeting_rows.extend(rank_df.dropna(subset=['mse']).sort_values('mse', ascending=False).head(50).assign(category='worst_mse').to_dict(orient='records'))
+                meeting_rows.extend(rank_df.dropna(subset=['corr']).sort_values('corr', ascending=False).head(10).assign(category='best_corr').to_dict(orient='records'))
+                meeting_rows.extend(rank_df.dropna(subset=['corr']).sort_values('corr', ascending=True).head(10).assign(category='worst_corr').to_dict(orient='records'))
+                pd.DataFrame(meeting_rows).to_csv(
+                    os.path.join(outputs_dir, 'meeting.csv'),
+                    index=False,
+                    encoding='utf-8-sig'
+                )
+
+        if not has_segment_metrics:
+            print('segment-wise metrics skipped (segment_col not set or ids unavailable)')
+
+        csv_path = getattr(self.args, 'summary_csv', os.path.join(os.getcwd(), 'results_summary.csv'))
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         fieldnames = [
-            "time", "model",
+            "time", "run_id", "setting", "run_dir", "device", "model",
             "input_col", "output_col",
             "seq_len", "label_len", "pred_len",
             "stride", "kernel_size",
@@ -361,9 +593,41 @@ class Exp_Main(Exp_Basic):
             kernel_size = str(getattr(self.args, "dlinear_kernel_size", ""))
 
         epochs_run = int(getattr(self, "epochs_trained", self.args.train_epochs))
+        run_dir_abs = os.path.abspath(getattr(self.args, 'run_dir', ''))
+        outputs_abs = os.path.abspath(outputs_dir)
+        overview_path = os.path.join(run_dir_abs, 'run_overview.txt')
+
+        overview_lines = [
+            f"run_dir: {run_dir_abs}",
+            f"device: {self.device}",
+            f"model: {self.args.model}",
+            f"input_col: {getattr(self.args, 'input_col', None) or self.args.target}",
+            f"target: {self.args.target}",
+            "",
+            "outputs:",
+            f"- metrics.npy",
+            f"- pred.npy",
+            f"- true.npy",
+            f"- mse_horizon.csv",
+            f"- mse_horizon.png",
+            f"- mse_segment_combined.csv",
+            f"- segment_horizon_rank.csv",
+            f"- segment_horizon_points.csv.gz",
+            f"- meeting.csv",
+            "",
+            f"outputs_abs: {outputs_abs}"
+        ]
+        with open(overview_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(overview_lines) + '\n')
+
+        overview_url = Path(overview_path).resolve().as_uri()
 
         row = {
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "run_id": getattr(self.args, 'run_id', ''),
+            "setting": setting,
+            "run_dir": f"=HYPERLINK(\"{overview_url}\",\"open_overview\")",
+            "device": str(self.device),
             "model": self.args.model,
             "input_col": getattr(self.args, "input_col", None) or self.args.target,
             "output_col": self.args.target,
@@ -388,9 +652,9 @@ class Exp_Main(Exp_Basic):
                 writer.writeheader()
             writer.writerow(row)
 
-        np.save(folder_path + 'metrics.npy', np.array([float(mae), float(mse), float(rmse), float(mape), float(mspe), float(rse)]))
-        np.save(folder_path + 'pred.npy', preds)
-        np.save(folder_path + 'true.npy', trues)
+        np.save(os.path.join(outputs_dir, 'metrics.npy'), np.array([float(mae), float(mse), float(rmse), float(mape), float(mspe), float(rse)]))
+        np.save(os.path.join(outputs_dir, 'pred.npy'), preds)
+        np.save(os.path.join(outputs_dir, 'true.npy'), trues)
         # np.save(folder_path + 'x.npy', inputx)
         return
 
@@ -398,8 +662,7 @@ class Exp_Main(Exp_Basic):
         pred_data, pred_loader = self._get_data(flag='pred')
 
         if load:
-            path = os.path.join(self.args.checkpoints, setting)
-            best_model_path = path + '/' + 'checkpoint.pth'
+            best_model_path = os.path.join(self._checkpoint_dir(), 'checkpoint.pth')
             self.model.load_state_dict(torch.load(best_model_path))
 
         preds = []
@@ -416,7 +679,7 @@ class Exp_Main(Exp_Basic):
                 dec_inp = torch.zeros([batch_y.shape[0], self.args.pred_len, batch_y.shape[2]]).float().to(batch_y.device)
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
-                if self.args.use_amp:
+                if self.use_amp:
                     with torch.cuda.amp.autocast():
                         if 'Linear' in self.args.model:
                             outputs = self.model(batch_x)
@@ -442,11 +705,9 @@ class Exp_Main(Exp_Basic):
             preds = pred_data.inverse_transform(preds)
         
         # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        outputs_dir = self._outputs_dir()
 
-        np.save(folder_path + 'real_prediction.npy', preds)
-        pd.DataFrame(np.append(np.transpose([pred_data.future_dates]), preds[0], axis=1), columns=pred_data.cols).to_csv(folder_path + 'real_prediction.csv', index=False)
+        np.save(os.path.join(outputs_dir, 'real_prediction.npy'), preds)
+        pd.DataFrame(np.append(np.transpose([pred_data.future_dates]), preds[0], axis=1), columns=pred_data.cols).to_csv(os.path.join(outputs_dir, 'real_prediction.csv'), index=False)
 
         return
