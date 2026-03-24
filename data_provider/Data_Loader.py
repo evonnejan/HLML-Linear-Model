@@ -12,8 +12,9 @@ warnings.filterwarnings('ignore')
 
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
-                 features='S', data_path='ETTh1.csv', input_col=None, segment_col=None,
-                 target='OT', stride=1, scale=True, timeenc=0, freq='h', train_only=False):
+                 features='S', data_path='ETTh1.csv', input_col=None, exog_col=None, segment_col=None,
+                 target='OT', stride=1, scale=True, timeenc=0, freq='h', train_only=False,
+                 model_name=None):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -33,7 +34,9 @@ class Dataset_Custom(Dataset):
         self.features = features
         self.segment_col = segment_col
         self.input_col = input_col
+        self.exog_col = exog_col
         self.target = target
+        self.model_name = model_name
         self.scale = scale
         self.timeenc = timeenc
         self.freq = freq
@@ -42,6 +45,17 @@ class Dataset_Custom(Dataset):
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
+
+    @staticmethod
+    def _parse_col_spec(col_spec):
+        if col_spec is None:
+            return []
+        if isinstance(col_spec, str):
+            return [item.strip() for item in col_spec.split(',') if item.strip()]
+        if isinstance(col_spec, (list, tuple)):
+            return [str(item).strip() for item in col_spec if str(item).strip()]
+        text = str(col_spec).strip()
+        return [text] if text else []
 
     def __read_data__(self):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
@@ -152,7 +166,54 @@ class Dataset_Custom(Dataset):
         # =========================
         # 4) build df_x, df_y and scale using df_train only
         # =========================
-        if self.features in ["M", "MS"]:
+        if self.model_name == "DLinearMix":
+            input_cols = self._parse_col_spec(self.input_col)
+            exog_cols = self._parse_col_spec(self.exog_col)
+
+            if len(input_cols) == 0:
+                raise ValueError("DLinearMix requires input_col (comma-separated allowed), e.g., HL02,HL03")
+
+            x_cols = []
+            for column in input_cols + exog_cols:
+                if column not in x_cols:
+                    x_cols.append(column)
+
+            for column in x_cols:
+                if column not in df_cur.columns:
+                    raise ValueError(f"column={column} not in columns: {df_cur.columns.tolist()}")
+            if self.target not in df_cur.columns:
+                raise ValueError(f"target={self.target} not in columns: {df_cur.columns.tolist()}")
+
+            if self.set_type == 0:
+                print(f"[Dataset DLinearMix] input_cols={input_cols}, exog_cols={exog_cols}, target={self.target}, scale={self.scale}, segment_split={seg_col is not None}")
+
+            df_x_cur = df_cur[x_cols].fillna(0)
+            df_y_cur = df_cur[[self.target]].fillna(0)
+
+            df_x_train = df_train[x_cols].fillna(0)
+            df_y_train = df_train[[self.target]].fillna(0)
+
+            if self.scale:
+                self.scaler_x = StandardScaler()
+                self.scaler_y = StandardScaler()
+
+                self.scaler_x.fit(df_x_train.values)
+                self.scaler_y.fit(df_y_train.values)
+
+                data_x_all = self.scaler_x.transform(df_x_cur.values)
+                data_y_all = self.scaler_y.transform(df_y_cur.values)
+
+                self.scaler = self.scaler_y
+            else:
+                self.scaler_x = None
+                self.scaler_y = None
+                self.scaler = None
+                data_x_all = df_x_cur.values
+                data_y_all = df_y_cur.values
+
+            self.x_cols = x_cols
+
+        elif self.features in ["M", "MS"]:
             df_data_cur = df_cur[cols].fillna(0)
             df_data_train = df_train[cols].fillna(0)
 
@@ -235,14 +296,22 @@ class Dataset_Custom(Dataset):
         self.dates = pd.to_datetime(df_cur["date"]).iloc[border1:border2].to_numpy()
         self.y_raw = df_cur[self.target].iloc[border1:border2].fillna(0).to_numpy()
 
-        # 如果你也想記錄輸入欄位（HL02）原始值（可選）
-        x_col = self.input_col if getattr(self, "input_col", None) else self.target
-        self.x_raw = df_cur[x_col].iloc[border1:border2].fillna(0).to_numpy()
+        # 如果你也想記錄輸入欄位原始值（可選）
+        if self.model_name == "DLinearMix":
+            x_cols = getattr(self, "x_cols", self._parse_col_spec(self.input_col))
+            if len(x_cols) > 0 and x_cols[0] in df_cur.columns:
+                self.x_raw = df_cur[x_cols[0]].iloc[border1:border2].fillna(0).to_numpy()
+            else:
+                self.x_raw = df_cur[self.target].iloc[border1:border2].fillna(0).to_numpy()
+        else:
+            x_col = self.input_col if getattr(self, "input_col", None) else self.target
+            self.x_raw = df_cur[x_col].iloc[border1:border2].fillna(0).to_numpy()
 
         # =========================
         # 7) build valid window start indices (segment-wise, on df_cur)
         # =========================
         self.valid_starts = None
+        self.window_segment_ids = None
         if seg_col is not None:
             seg = df_cur[seg_col].iloc[border1:border2].to_numpy()
             n = len(seg)
@@ -262,6 +331,7 @@ class Dataset_Custom(Dataset):
                 i = j
 
             self.valid_starts = np.asarray(valid, dtype=np.int64)
+            self.window_segment_ids = seg[self.valid_starts]
 
     def __getitem__(self, index):
         s_begin = int(self.valid_starts[index]) if self.valid_starts is not None else index

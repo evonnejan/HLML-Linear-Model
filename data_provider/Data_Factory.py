@@ -31,20 +31,28 @@ def data_provider(args, flag):
 
     stride = args.stride_train if flag == 'train' else args.stride_eval
     
-    data_set = Data(
+    common_kwargs = dict(
         root_path=args.root_path,
         data_path=args.data_path,
         flag=flag,
         size=[args.seq_len, args.label_len, args.pred_len],
         features=args.features,
-        stride = stride,
-        input_col=args.input_col,
-        segment_col=args.segment_col,
         target=args.target,
         timeenc=timeenc,
         freq=freq,
         train_only=train_only
     )
+
+    if Data is Dataset_Custom:
+        common_kwargs.update(dict(
+            stride=stride,
+            input_col=args.input_col,
+            exog_col=getattr(args, 'exog_col', None),
+            segment_col=args.segment_col,
+            model_name=getattr(args, 'model', None),
+        ))
+
+    data_set = Data(**common_kwargs)
     print(f"[{flag} set] 總筆數: {len(data_set)}")
     
     # 注意：在 Windows 環境下，DataLoader 的 num_workers 如果大於 0 有時會卡死
