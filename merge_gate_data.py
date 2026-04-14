@@ -87,6 +87,52 @@ def merge_gate(
     return merged
 
 
+def _build_report(result: pd.DataFrame) -> str:
+    """Build a human-readable text report of gate-column NaN statistics."""
+    total_rows = len(result)
+    nan_counts = result[GATE_COLS].isna().sum()
+    nan_pct = (nan_counts / total_rows * 100).round(2)
+
+    # Per-segment NaN analysis
+    has_any_nan = result[GATE_COLS].isna().any(axis=1)
+    seg_total = result.groupby(SEGMENT_COL).size().rename("total_rows")
+    seg_nan = result[has_any_nan].groupby(SEGMENT_COL).size().rename("nan_rows")
+    seg_stats = seg_total.to_frame().join(seg_nan, how="left").fillna({"nan_rows": 0})
+    seg_stats["nan_rows"] = seg_stats["nan_rows"].astype(int)
+    seg_stats["nan_pct"] = (seg_stats["nan_rows"] / seg_stats["total_rows"] * 100).round(2)
+
+    segments_with_nan = seg_stats[seg_stats["nan_rows"] > 0].sort_index()
+    n_clean_segs = (seg_stats["nan_rows"] == 0).sum()
+
+    lines = []
+    lines.append("=" * 60)
+    lines.append("Gate Data Merge Report")
+    lines.append("=" * 60)
+    lines.append(f"Total rows          : {total_rows:,}")
+    lines.append(f"Total segments      : {len(seg_stats):,}")
+    lines.append(f"Segments with no NaN: {n_clean_segs:,} of {len(seg_stats):,}")
+    lines.append("")
+
+    lines.append("--- Missing value % per gate column ---")
+    for col in GATE_COLS:
+        lines.append(f"  {col:<30} {nan_counts[col]:>6} NaN  ({nan_pct[col]:.2f}%)")
+    lines.append("")
+
+    lines.append("--- Segments containing NaN values ---")
+    if len(segments_with_nan) == 0:
+        lines.append("  (none)")
+    else:
+        lines.append(f"  {'segment_id':<12} {'total_rows':>10} {'nan_rows':>10} {'nan_%':>8}")
+        lines.append(f"  {'-'*12} {'-'*10} {'-'*10} {'-'*8}")
+        for seg_id, row in segments_with_nan.iterrows():
+            lines.append(
+                f"  {seg_id:<12} {row['total_rows']:>10,} {row['nan_rows']:>10,} {row['nan_pct']:>7.2f}%"
+            )
+    lines.append("")
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
 def main() -> None:
     print(f"Loading water-level data from: {WATER_LEVEL_CSV}")
     wl = pd.read_csv(WATER_LEVEL_CSV)
@@ -97,25 +143,45 @@ def main() -> None:
     print(f"Merging ({len(wl):,} water-level rows × {len(gate):,} gate rows)...")
     result = merge_gate(wl, gate)
 
-    # ------------------------------------------------------------------ #
-    #  Validation report                                                   #
-    # ------------------------------------------------------------------ #
     assert len(result) == len(wl), (
         f"Row count mismatch: input={len(wl)}, output={len(result)}"
     )
 
-    print("\n--- Merge validation ---")
-    print(f"Output rows      : {len(result):,}  (matches input: ✓)")
-    print(f"Output columns   : {list(result.columns)}")
-    print(f"\nGate column NaN counts after merge:")
+    # Sort by segment_id first, then by date within each segment.
+    result = result.sort_values([SEGMENT_COL, "date"]).reset_index(drop=True)
+
+    # ------------------------------------------------------------------ #
+    #  Console summary                                                     #
+    # ------------------------------------------------------------------ #
     nan_counts = result[GATE_COLS].isna().sum()
     nan_pct = (nan_counts / len(result) * 100).round(1)
+    has_any_nan = result[GATE_COLS].isna().any(axis=1)
+    seg_nan_count = (result[has_any_nan].groupby(SEGMENT_COL).size() > 0).sum()
+    total_segs = result[SEGMENT_COL].nunique()
+    n_clean_segs = total_segs - seg_nan_count
+
+    print("\n--- Merge validation ---")
+    print(f"Output rows             : {len(result):,}  (matches input: ✓)")
+    print(f"Segments with no NaN    : {n_clean_segs:,} of {total_segs:,}")
+    print(f"\nGate column NaN counts after merge:")
     for col in GATE_COLS:
         print(f"  {col:<30} {nan_counts[col]:>6} NaN  ({nan_pct[col]}%)")
 
+    # ------------------------------------------------------------------ #
+    #  Text report                                                         #
+    # ------------------------------------------------------------------ #
+    report_text = _build_report(result)
+    report_path = OUTPUT_CSV.with_suffix(".report.txt")
+    report_path.write_text(report_text, encoding="utf-8")
+    print(f"\nReport saved to : {report_path}")
+    print(report_text)
+
+    # ------------------------------------------------------------------ #
+    #  Save CSV                                                            #
+    # ------------------------------------------------------------------ #
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
-    print(f"\nSaved to: {OUTPUT_CSV}")
+    print(f"CSV saved to    : {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":
