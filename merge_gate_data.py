@@ -85,3 +85,38 @@ def merge_gate(
 
     merged = merged.drop(columns=["_gate_obs_time"])
     return merged
+
+
+def main() -> None:
+    print(f"Loading water-level data from: {WATER_LEVEL_CSV}")
+    wl = pd.read_csv(WATER_LEVEL_CSV)
+
+    print(f"Loading gate data from: {GATE_CSV}")
+    gate = pd.read_csv(GATE_CSV)
+
+    print(f"Merging ({len(wl):,} water-level rows × {len(gate):,} gate rows)...")
+    result = merge_gate(wl, gate)
+
+    # ------------------------------------------------------------------ #
+    #  Validation report                                                   #
+    # ------------------------------------------------------------------ #
+    assert len(result) == len(wl), (
+        f"Row count mismatch: input={len(wl)}, output={len(result)}"
+    )
+
+    print("\n--- Merge validation ---")
+    print(f"Output rows      : {len(result):,}  (matches input: ✓)")
+    print(f"Output columns   : {list(result.columns)}")
+    print(f"\nGate column NaN counts after merge:")
+    nan_counts = result[GATE_COLS].isna().sum()
+    nan_pct = (nan_counts / len(result) * 100).round(1)
+    for col in GATE_COLS:
+        print(f"  {col:<30} {nan_counts[col]:>6} NaN  ({nan_pct[col]}%)")
+
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
+    print(f"\nSaved to: {OUTPUT_CSV}")
+
+
+if __name__ == "__main__":
+    main()
