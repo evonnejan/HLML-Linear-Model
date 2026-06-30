@@ -652,7 +652,8 @@ class Exp_Main(Exp_Basic):
                 writer.writeheader()
             writer.writerow(row)
 
-        np.save(os.path.join(outputs_dir, 'metrics.npy'), np.array([float(mae), float(mse), float(rmse), float(mape), float(mspe), float(rse)]))
+        corr_scalar = float(np.mean(corr)) if isinstance(corr, np.ndarray) else float(corr)
+        np.save(os.path.join(outputs_dir, 'metrics.npy'), np.array([float(mae), float(mse), float(rmse), float(mape), float(mspe), float(rse), corr_scalar]))
         np.save(os.path.join(outputs_dir, 'pred.npy'), preds)
         np.save(os.path.join(outputs_dir, 'true.npy'), trues)
         # np.save(folder_path + 'x.npy', inputx)

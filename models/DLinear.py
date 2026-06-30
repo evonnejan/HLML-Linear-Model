@@ -48,7 +48,7 @@ class Model(nn.Module):
         kernel_size = getattr(configs, 'dlinear_kernel_size', 25)
         if kernel_size % 2 == 0:
             raise ValueError("DLinear kernel_size 必須是奇數，否則長度會對不齊")
-        self.decompsition = series_decomp(kernel_size)
+        self.decomposition = series_decomp(kernel_size)
         self.individual = configs.individual
         self.channels = configs.enc_in
 
@@ -73,7 +73,7 @@ class Model(nn.Module):
 
     def forward(self, x):
         # x: [Batch, Input length, Channel]
-        seasonal_init, trend_init = self.decompsition(x)
+        seasonal_init, trend_init = self.decomposition(x)
         seasonal_init, trend_init = seasonal_init.permute(0,2,1), trend_init.permute(0,2,1)
         if self.individual:
             seasonal_output = torch.zeros([seasonal_init.size(0),seasonal_init.size(1),self.pred_len],dtype=seasonal_init.dtype).to(seasonal_init.device)

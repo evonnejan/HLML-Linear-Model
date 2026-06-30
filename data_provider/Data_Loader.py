@@ -10,21 +10,24 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+MIX_STYLE_MODELS = {'DLinearMix', 'DLinearMix2'}
+
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv', input_col=None, exog_col=None, segment_col=None,
                  target='OT', stride=1, scale=True, timeenc=0, freq='h', train_only=False,
                  model_name=None):
-        # size [seq_len, label_len, pred_len]
-        # info
-        if size == None:
-            self.seq_len = 24 * 4 * 4
-            self.label_len = 24 * 4
-            self.pred_len = 24 * 4
-        else:
-            self.seq_len = size[0]
-            self.label_len = size[1]
-            self.pred_len = size[2]
+        # size [seq_len, label_len, pred_len] — required, no default.
+        # label_len is currently unused by the linear-style models but kept
+        # in the signature for backwards compatibility with the dataset API.
+        if size is None:
+            raise ValueError(
+                "Dataset_Custom requires `size=[seq_len, label_len, pred_len]`; "
+                "no default is provided to avoid silently mismatching CLI args."
+            )
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
         # init
         assert flag in ['train', 'test', 'val']
         type_map = {'train': 0, 'val': 1, 'test': 2}
@@ -64,6 +67,13 @@ class Dataset_Custom(Dataset):
         # 1) segment-based split (train/val/test by segment_id)
         # =========================
         seg_col = getattr(self, "segment_col", None)
+
+        if seg_col is None and "segment_id" in df_raw.columns and self.set_type == 0:
+            print(
+                "[WARNING] CSV contains a 'segment_id' column but --segment_col is not set. "
+                "Falling back to row-based train/val/test split, which may cross segment boundaries. "
+                "Pass --segment_col segment_id to enable segment-aware splitting."
+            )
 
         if seg_col is not None:
             if seg_col not in df_raw.columns:
@@ -166,12 +176,12 @@ class Dataset_Custom(Dataset):
         # =========================
         # 4) build df_x, df_y and scale using df_train only
         # =========================
-        if self.model_name == "DLinearMix":
+        if self.model_name in MIX_STYLE_MODELS:
             input_cols = self._parse_col_spec(self.input_col)
             exog_cols = self._parse_col_spec(self.exog_col)
 
             if len(input_cols) == 0:
-                raise ValueError("DLinearMix requires input_col (comma-separated allowed), e.g., HL02,HL03")
+                raise ValueError(f"{self.model_name} requires input_col (comma-separated allowed), e.g., HL02,HL03")
 
             x_cols = []
             for column in input_cols + exog_cols:
@@ -184,42 +194,88 @@ class Dataset_Custom(Dataset):
             if self.target not in df_cur.columns:
                 raise ValueError(f"target={self.target} not in columns: {df_cur.columns.tolist()}")
 
+            # Identify boolean indicator columns; they keep their 0/1 values and bypass the scaler.
+            bool_x_cols = [c for c in x_cols if df_cur[c].dtype == bool]
+            cont_x_cols = [c for c in x_cols if c not in bool_x_cols]
+            cont_idx = [x_cols.index(c) for c in cont_x_cols]
+
             if self.set_type == 0:
-                print(f"[Dataset DLinearMix] input_cols={input_cols}, exog_cols={exog_cols}, target={self.target}, scale={self.scale}, segment_split={seg_col is not None}")
+                print(
+                    f"[Dataset {self.model_name}] input_cols={input_cols}, exog_cols={exog_cols}, "
+                    f"target={self.target}, scale={self.scale}, segment_split={seg_col is not None}, "
+                    f"bool_passthrough={bool_x_cols}"
+                )
 
-            df_x_cur = df_cur[x_cols].fillna(0)
-            df_y_cur = df_cur[[self.target]].fillna(0)
+            # Cast booleans to int8 so the resulting array is purely numeric.
+            df_x_cur = df_cur[x_cols].copy()
+            df_x_train = df_train[x_cols].copy()
+            for c in bool_x_cols:
+                df_x_cur[c] = df_x_cur[c].astype(np.int8)
+                df_x_train[c] = df_x_train[c].astype(np.int8)
 
-            df_x_train = df_train[x_cols].fillna(0)
-            df_y_train = df_train[[self.target]].fillna(0)
+            df_y_cur_raw = df_cur[[self.target]]
+            df_y_train_raw = df_train[[self.target]]
+
+            # Determine which TRAIN rows contain NaN in any checked column;
+            # those rows are excluded from scaler fit so statistics are not
+            # polluted by fillna(0) values.
+            nan_check_cols = list(x_cols)
+            if self.target not in nan_check_cols:
+                nan_check_cols.append(self.target)
+            train_bad_rows = df_train[nan_check_cols].isna().any(axis=1).to_numpy()
+            n_clean_train = int((~train_bad_rows).sum())
+            if self.set_type == 0 and train_bad_rows.any():
+                print(
+                    f"[scaler fit] train: using {n_clean_train}/{len(train_bad_rows)} clean rows "
+                    f"({train_bad_rows.sum()} NaN-bearing rows excluded from scaler fit)"
+                )
+
+            # Now apply fillna(0) for any rows that survive the window-level filter
+            # but might still contain a NaN in another column not in nan_check_cols.
+            df_x_cur = df_x_cur.fillna(0)
+            df_x_train = df_x_train.fillna(0)
+            df_y_cur = df_y_cur_raw.fillna(0)
+            df_y_train = df_y_train_raw.fillna(0)
 
             if self.scale:
-                self.scaler_x = StandardScaler()
                 self.scaler_y = StandardScaler()
-
-                self.scaler_x.fit(df_x_train.values)
-                self.scaler_y.fit(df_y_train.values)
-
-                data_x_all = self.scaler_x.transform(df_x_cur.values)
+                self.scaler_y.fit(df_y_train.values[~train_bad_rows])
                 data_y_all = self.scaler_y.transform(df_y_cur.values)
+
+                data_x_all = df_x_cur.values.astype(np.float32, copy=True)
+                if len(cont_x_cols) > 0:
+                    self.scaler_x = StandardScaler()
+                    train_cont_vals = df_x_train[cont_x_cols].values[~train_bad_rows]
+                    self.scaler_x.fit(train_cont_vals)
+                    data_x_all[:, cont_idx] = self.scaler_x.transform(df_x_cur[cont_x_cols].values)
+                else:
+                    self.scaler_x = None
 
                 self.scaler = self.scaler_y
             else:
                 self.scaler_x = None
                 self.scaler_y = None
                 self.scaler = None
-                data_x_all = df_x_cur.values
+                data_x_all = df_x_cur.values.astype(np.float32, copy=True)
                 data_y_all = df_y_cur.values
 
             self.x_cols = x_cols
+            self.bool_x_cols = bool_x_cols
 
         elif self.features in ["M", "MS"]:
+            train_bad_rows = df_train[cols].isna().any(axis=1).to_numpy()
+            if self.set_type == 0 and train_bad_rows.any():
+                print(
+                    f"[scaler fit] train: using {(~train_bad_rows).sum()}/{len(train_bad_rows)} clean rows "
+                    f"({train_bad_rows.sum()} NaN-bearing rows excluded from scaler fit)"
+                )
+
             df_data_cur = df_cur[cols].fillna(0)
             df_data_train = df_train[cols].fillna(0)
 
             if self.scale:
                 self.scaler = StandardScaler()
-                self.scaler.fit(df_data_train.values)
+                self.scaler.fit(df_data_train.values[~train_bad_rows])
                 data_all = self.scaler.transform(df_data_cur.values)
             else:
                 self.scaler = None
@@ -241,6 +297,14 @@ class Dataset_Custom(Dataset):
             if self.set_type == 0:  # print only for train
                 print(f"[Dataset S] x_col={x_col}, y_col={y_col}, scale={self.scale}, segment_split={seg_col is not None}")
 
+            s_check_cols = [x_col, y_col] if x_col != y_col else [x_col]
+            train_bad_rows = df_train[s_check_cols].isna().any(axis=1).to_numpy()
+            if self.set_type == 0 and train_bad_rows.any():
+                print(
+                    f"[scaler fit] train: using {(~train_bad_rows).sum()}/{len(train_bad_rows)} clean rows "
+                    f"({train_bad_rows.sum()} NaN-bearing rows excluded from scaler fit)"
+                )
+
             df_x_cur = df_cur[[x_col]].fillna(0)
             df_y_cur = df_cur[[y_col]].fillna(0)
 
@@ -251,8 +315,8 @@ class Dataset_Custom(Dataset):
                 self.scaler_x = StandardScaler()
                 self.scaler_y = StandardScaler()
 
-                self.scaler_x.fit(df_x_train.values)
-                self.scaler_y.fit(df_y_train.values)
+                self.scaler_x.fit(df_x_train.values[~train_bad_rows])
+                self.scaler_y.fit(df_y_train.values[~train_bad_rows])
 
                 data_x_all = self.scaler_x.transform(df_x_cur.values)
                 data_y_all = self.scaler_y.transform(df_y_cur.values)
@@ -297,7 +361,7 @@ class Dataset_Custom(Dataset):
         self.y_raw = df_cur[self.target].iloc[border1:border2].fillna(0).to_numpy()
 
         # 如果你也想記錄輸入欄位原始值（可選）
-        if self.model_name == "DLinearMix":
+        if self.model_name in MIX_STYLE_MODELS:
             x_cols = getattr(self, "x_cols", self._parse_col_spec(self.input_col))
             if len(x_cols) > 0 and x_cols[0] in df_cur.columns:
                 self.x_raw = df_cur[x_cols[0]].iloc[border1:border2].fillna(0).to_numpy()
@@ -310,12 +374,45 @@ class Dataset_Custom(Dataset):
         # =========================
         # 7) build valid window start indices (segment-wise, on df_cur)
         # =========================
+        # Determine NaN-check columns: any NaN inside a window's [s, s+seq_len+pred_len)
+        # range will cause that window to be dropped, so the model never sees fillna(0)
+        # values as either input or target.
+        if self.model_name in MIX_STYLE_MODELS:
+            nan_check_cols = list(self.x_cols)
+            if self.target not in nan_check_cols:
+                nan_check_cols.append(self.target)
+        elif self.features in ("M", "MS"):
+            nan_check_cols = list(cols)
+        else:
+            x_col_for_check = self.input_col if getattr(self, "input_col", None) else self.target
+            nan_check_cols = [x_col_for_check, self.target] if x_col_for_check != self.target else [self.target]
+        bad_rows = df_cur[nan_check_cols].iloc[border1:border2].isna().any(axis=1).to_numpy()
+
         self.valid_starts = None
         self.window_segment_ids = None
+        need = self.seq_len + self.pred_len
+        split_name = {0: "train", 1: "val", 2: "test"}[self.set_type]
+
+        def _drop_nan_windows(valid_arr, bad_arr):
+            """Return valid_arr with any window touching a NaN row removed."""
+            if len(valid_arr) == 0 or not bad_arr.any():
+                return valid_arr
+            csum = np.concatenate([[0], np.cumsum(bad_arr.astype(np.int32))])
+            window_bad = (csum[need:] - csum[:-need]) > 0
+            keep_mask = ~window_bad[valid_arr]
+            n_before = int(len(valid_arr))
+            kept = valid_arr[keep_mask]
+            dropped = n_before - int(len(kept))
+            if dropped > 0:
+                print(
+                    f"[NaN window filter] {split_name}: dropped {dropped}/{n_before} windows "
+                    f"({dropped / max(n_before, 1) * 100:.2f}%) due to NaN in {nan_check_cols}"
+                )
+            return kept
+
         if seg_col is not None:
             seg = df_cur[seg_col].iloc[border1:border2].to_numpy()
             n = len(seg)
-            need = self.seq_len + self.pred_len
 
             valid = []
             i = 0
@@ -330,8 +427,18 @@ class Dataset_Custom(Dataset):
                     valid.extend(range(i, i + max_start + 1, self.stride))
                 i = j
 
-            self.valid_starts = np.asarray(valid, dtype=np.int64)
-            self.window_segment_ids = seg[self.valid_starts]
+            valid = _drop_nan_windows(np.asarray(valid, dtype=np.int64), bad_rows)
+            self.valid_starts = valid
+            self.window_segment_ids = seg[self.valid_starts] if len(self.valid_starts) > 0 else np.array([], dtype=seg.dtype)
+        else:
+            # Row-based fallback split: enumerate every stride-th start in the current slice.
+            n = border2 - border1
+            if n >= need:
+                valid = np.arange(0, n - need + 1, self.stride, dtype=np.int64)
+                valid = _drop_nan_windows(valid, bad_rows)
+            else:
+                valid = np.asarray([], dtype=np.int64)
+            self.valid_starts = valid
 
     def __getitem__(self, index):
         s_begin = int(self.valid_starts[index]) if self.valid_starts is not None else index
@@ -362,16 +469,11 @@ class Dataset_Pred(Dataset):
     def __init__(self, root_path, flag='pred', size=None,
                  features='S', data_path='ETTh1.csv',
                  target='OT', scale=True, inverse=False, timeenc=0, freq='15min', cols=None, train_only=False):
-        # size [seq_len, label_len, pred_len]
-        # info
-        if size == None:
-            self.seq_len = 24 * 4 * 4
-            self.label_len = 24 * 4
-            self.pred_len = 24 * 4
-        else:
-            self.seq_len = size[0]
-            self.label_len = size[1]
-            self.pred_len = size[2]
+        if size is None:
+            raise ValueError("Dataset_Pred requires size=[seq_len, label_len, pred_len]")
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
         # init
         assert flag in ['pred']
 

@@ -36,8 +36,14 @@ class series_decomp(nn.Module):
 
 class Model(nn.Module):
     """
-    DLinear with channel mixer:
-    (input_cols + exog_cols) -> single target channel -> DLinear forecast
+    DLinear with early channel mixer.
+
+    Unified channel-layout convention (shared with DLinearMix2):
+    - input_col controls branch channels
+    - exog_col controls exogenous channels
+    - mix_in / enc_in store total channel count
+
+    This model uses all channels together via one linear mixer.
     """
     def __init__(self, configs):
         super(Model, self).__init__()
@@ -46,24 +52,34 @@ class Model(nn.Module):
 
         kernel_size = getattr(configs, 'dlinear_kernel_size', 25)
         if kernel_size % 2 == 0:
-            raise ValueError("DLinear kernel_size 必須是奇數，否則長度會對不齊")
+            raise ValueError(f"DLinear kernel_size must be an odd number to ensure proper padding, got {kernel_size}")
 
         in_channels = int(getattr(configs, 'mix_in', getattr(configs, 'enc_in', 1)))
         if in_channels <= 0:
             raise ValueError(f"mix_in must be positive, got {in_channels}")
+
+        self.branch_in = int(getattr(configs, 'branch_in', in_channels))
+        self.exog_in = int(getattr(configs, 'exog_in', max(0, in_channels - self.branch_in)))
+        if self.branch_in < 0 or self.exog_in < 0:
+            raise ValueError(f"branch_in/exog_in must be >= 0, got branch_in={self.branch_in}, exog_in={self.exog_in}")
+        if self.branch_in + self.exog_in != in_channels:
+            raise ValueError(
+                f"branch_in + exog_in must equal total input channels: "
+                f"{self.branch_in} + {self.exog_in} != {in_channels}"
+            )
 
         self.input_col = getattr(configs, 'input_col', None)
         self.exog_col = getattr(configs, 'exog_col', None)
         self.target = getattr(configs, 'target', None)
 
         self.channel_mixer = nn.Linear(in_channels, 1)
-        self.decompsition = series_decomp(kernel_size)
+        self.decomposition = series_decomp(kernel_size)
         self.Linear_Seasonal = nn.Linear(self.seq_len, self.pred_len)
         self.Linear_Trend = nn.Linear(self.seq_len, self.pred_len)
 
     def forward(self, x):
         x_mixed = self.channel_mixer(x)
-        seasonal_init, trend_init = self.decompsition(x_mixed)
+        seasonal_init, trend_init = self.decomposition(x_mixed)
         seasonal_init = seasonal_init.permute(0, 2, 1)
         trend_init = trend_init.permute(0, 2, 1)
 
