@@ -2,9 +2,10 @@
 
 Output: dataset/water_level_rain_gate_all.csv
   - Same rows and datetime index as water_level_rain_all4.csv
-  - 7 gate columns appended
+  - 7 gate columns appended; negative readings clipped to 0 (no physical meaning)
   - Stale gate values (backward lag > STALENESS_LIMIT) set to NaN
   - Remaining per-column sensor NaN filled forward within each segment
+  - Constant-valued helper columns (e.g. StationId) dropped from the output
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ GATE_COLS = [
 
 SEGMENT_COL = "segment_id"
 STALENESS_LIMIT = pd.Timedelta("5min")
+DROP_COLS = ["StationId"]
 
 
 def merge_gate(
@@ -82,6 +84,13 @@ def merge_gate(
         merged.groupby(SEGMENT_COL, sort=False)[GATE_COLS]
         .transform(lambda col: col.ffill())
     )
+
+    # ------------------------------------------------------------------ #
+    #  Clip negative gate values to 0                                     #
+    #  Negative gate openings have no physical meaning; treat them as     #
+    #  fully-closed. NaN entries are preserved.                           #
+    # ------------------------------------------------------------------ #
+    merged[GATE_COLS] = merged[GATE_COLS].clip(lower=0)
 
     merged = merged.drop(columns=["_gate_obs_time"])
     return merged
@@ -149,6 +158,12 @@ def main() -> None:
 
     # Sort by segment_id first, then by date within each segment.
     result = result.sort_values([SEGMENT_COL, "date"]).reset_index(drop=True)
+
+    # Drop helper columns that carry no model signal (constant across the dataset).
+    drop_present = [c for c in DROP_COLS if c in result.columns]
+    if drop_present:
+        result = result.drop(columns=drop_present)
+        print(f"Dropped constant helper columns: {drop_present}")
 
     # ------------------------------------------------------------------ #
     #  Console summary                                                     #
