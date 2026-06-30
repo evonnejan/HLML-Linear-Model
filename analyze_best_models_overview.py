@@ -43,16 +43,37 @@ def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
 
 
+def _is_run_dir(path: str) -> bool:
+    return os.path.isdir(path) and os.path.exists(os.path.join(path, "run_args.json"))
+
+
 def discover_runs(runs_root: str) -> List[str]:
+    """Find run dirs under runs_root.
+
+    Supports legacy `runs/<setting>/` and new `runs/<MODEL>/<setting>/` layouts.
+    """
     if not os.path.isdir(runs_root):
         raise FileNotFoundError(f"runs_root not found: {runs_root}")
-    run_dirs = [
-        os.path.join(runs_root, name)
-        for name in os.listdir(runs_root)
-        if os.path.isdir(os.path.join(runs_root, name))
-    ]
-    run_dirs.sort()
+    run_dirs: List[str] = []
+    for name in sorted(os.listdir(runs_root)):
+        first = os.path.join(runs_root, name)
+        if not os.path.isdir(first):
+            continue
+        if _is_run_dir(first):
+            run_dirs.append(first)
+            continue
+        for sub in sorted(os.listdir(first)):
+            second = os.path.join(first, sub)
+            if _is_run_dir(second):
+                run_dirs.append(second)
     return run_dirs
+
+
+def _first_existing(*paths):
+    for p in paths:
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def load_run_info(run_dir: str) -> Optional[RunInfo]:
@@ -115,7 +136,7 @@ def plot_horizon_overlay(df_h: pd.DataFrame, out_path: str):
     plt.figure(figsize=(9.5, 5.2))
     for input_col, group in df_h.groupby("input_col"):
         group = group.sort_values("horizon")
-        plt.plot(group["horizon"], group["mse"], marker="o", linewidth=2, label=str(input_col))
+        plt.plot(group["horizon"], group["MSE"], marker="o", linewidth=2, label=str(input_col))
 
     plt.xlabel("Horizon (t+k)")
     plt.ylabel("MSE")
@@ -136,12 +157,12 @@ def build_horizon_relative_table(df_h: pd.DataFrame) -> pd.DataFrame:
         group = group.sort_values("horizon").copy()
         base_row = group[group["horizon"].astype(int) == 1]
         if len(base_row) == 0:
-            base_mse = float(group.iloc[0]["mse"])
+            base_mse = float(group.iloc[0]["MSE"])
         else:
-            base_mse = float(base_row.iloc[0]["mse"])
+            base_mse = float(base_row.iloc[0]["MSE"])
 
         safe_base = base_mse if abs(base_mse) > 1e-12 else 1e-12
-        group["mse_ratio_to_h1"] = group["mse"].astype(float) / safe_base
+        group["mse_ratio_to_h1"] = group["MSE"].astype(float) / safe_base
         group["mse_pct_change_to_h1"] = (group["mse_ratio_to_h1"] - 1.0) * 100.0
         rows.append(group)
 
@@ -240,6 +261,7 @@ def main():
     ensure_dir(fanplot_dir)
 
     run_dirs = discover_runs(args.runs_root)
+    print(f"[overview] discovered {len(run_dirs)} run dir(s) under {os.path.abspath(args.runs_root)}")
 
     rows = []
     horizon_tables: List[pd.DataFrame] = []
@@ -260,17 +282,25 @@ def main():
 
         outputs_dir = os.path.join(run_dir, "outputs")
         metrics_path = os.path.join(outputs_dir, "metrics.npy")
-        horizon_path = os.path.join(outputs_dir, "mse_horizon.csv")
-        segment_path = os.path.join(outputs_dir, "mse_segment_combined.csv")
+        horizon_path = _first_existing(
+            os.path.join(outputs_dir, "metrics_horizon.csv"),
+            os.path.join(outputs_dir, "mse_horizon.csv"),
+        )
+        segment_path = _first_existing(
+            os.path.join(outputs_dir, "metrics_segment.csv"),
+            os.path.join(outputs_dir, "mse_segment_combined.csv"),
+        )
         points_path = os.path.join(outputs_dir, "segment_horizon_points.csv.gz")
 
-        if not (os.path.exists(metrics_path) and os.path.exists(horizon_path) and os.path.exists(segment_path) and os.path.exists(points_path)):
+        if not (os.path.exists(metrics_path) and horizon_path and segment_path and os.path.exists(points_path)):
+            print(f"  [skip] missing outputs (metrics/horizon/segment/points) in {outputs_dir}")
             skipped += 1
             continue
 
         metrics_arr = np.load(metrics_path)
         mae = float(metrics_arr[0]) if len(metrics_arr) > 0 else np.nan
         mse = float(metrics_arr[1]) if len(metrics_arr) > 1 else np.nan
+        corr = float(metrics_arr[6]) if len(metrics_arr) > 6 else np.nan
 
         pair = pair_name(info.input_col, info.target)
         rows.append(
@@ -282,6 +312,7 @@ def main():
                 "kernel_size": info.kernel_size,
                 "mse_test": mse,
                 "mae_test": mae,
+                "corr_test": corr,
                 "run_dir": info.run_dir,
                 "input_col": info.input_col,
                 "target": info.target,
@@ -313,13 +344,17 @@ def main():
         best_rows.append(group.sort_values("mse_test", ascending=True).iloc[0])
     best_df = pd.DataFrame(best_rows).reset_index(drop=True)
 
-    overview_df = best_df[["pair", "setting", "model", "seq_len", "kernel_size", "mse_test", "mae_test"]].copy()
+    print(f"[overview] selected best run per input->target pair ({len(best_df)} pair(s)):")
+    for row in best_df.itertuples(index=False):
+        print(f"  - pair={row.pair}  model={row.model}  setting={row.setting}  mse_test={row.mse_test:.4f}  run_dir={row.run_dir}")
+
+    overview_df = best_df[["pair", "setting", "model", "seq_len", "kernel_size", "mse_test", "mae_test", "corr_test"]].copy()
     overview_df.to_csv(os.path.join(args.out_dir, "run_overview.csv"), index=False, encoding="utf-8-sig")
 
     best_settings = set(best_df["setting"].tolist())
     horizon_concat = pd.concat(horizon_tables, axis=0, ignore_index=True)
     horizon_best = horizon_concat[horizon_concat["setting"].isin(best_settings)].copy()
-    horizon_best = horizon_best[["pair", "input_col", "target", "setting", "horizon", "mse"]].sort_values(["input_col", "horizon"])
+    horizon_best = horizon_best[["pair", "input_col", "target", "setting", "horizon", "MSE"]].sort_values(["input_col", "horizon"])
 
     horizon_best.to_csv(os.path.join(args.out_dir, "horizon_mse_overlay.csv"), index=False, encoding="utf-8-sig")
     plot_horizon_overlay(horizon_best, os.path.join(args.out_dir, "horizon_mse_overlay.png"))
@@ -344,12 +379,12 @@ def main():
         if len(seg_overall) == 0:
             continue
 
-        topk = seg_overall.sort_values("mse", ascending=True).head(args.topk)
-        bottomk = seg_overall.sort_values("mse", ascending=False).head(args.topk)
+        topk = seg_overall.sort_values("MSE", ascending=True).head(args.topk)
+        bottomk = seg_overall.sort_values("MSE", ascending=False).head(args.topk)
 
         for rank_idx, item in enumerate(topk.itertuples(index=False), start=1):
             seg = item.segment
-            mse_val = float(item.mse)
+            mse_val = float(item.MSE)
             out_name = f"{safe_pair}_best_{rank_idx:02d}_seg-{seg}.png"
             title = f"{pair} | BEST #{rank_idx} segment={seg} overall_mse={mse_val:.4f}"
             plot_segment_fan(points_df, seg, title, os.path.join(fanplot_dir, out_name))
@@ -367,7 +402,7 @@ def main():
 
         for rank_idx, item in enumerate(bottomk.itertuples(index=False), start=1):
             seg = item.segment
-            mse_val = float(item.mse)
+            mse_val = float(item.MSE)
             out_name = f"{safe_pair}_worst_{rank_idx:02d}_seg-{seg}.png"
             title = f"{pair} | WORST #{rank_idx} segment={seg} overall_mse={mse_val:.4f}"
             plot_segment_fan(points_df, seg, title, os.path.join(fanplot_dir, out_name))

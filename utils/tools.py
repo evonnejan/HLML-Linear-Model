@@ -23,7 +23,30 @@ def adjust_learning_rate(optimizer, epoch, args):
     elif args.lradj == '5':
         lr_adjust = {epoch: args.learning_rate if epoch < 25 else args.learning_rate*0.1}
     elif args.lradj == '6':
-        lr_adjust = {epoch: args.learning_rate if epoch < 5 else args.learning_rate*0.1}  
+        lr_adjust = {epoch: args.learning_rate if epoch < 5 else args.learning_rate*0.1}
+    elif args.lradj == 'exp':
+        # Exponential decay: lr * 0.85^epoch, floor at lr * 0.01
+        # e.g. epoch 10 → 0.197x, epoch 20 → 0.039x
+        lr = max(args.learning_rate * (0.85 ** epoch), args.learning_rate * 0.01)
+        lr_adjust = {epoch: lr}
+    elif args.lradj == 'warmup_exp':
+        # Linear warm-up for `warmup_epochs` from 0.1*base → base, then exp decay
+        # gamma^k, floor at floor_ratio*base. `epoch` here is the count of finished
+        # epochs (matches existing `exp` semantics); LR returned is for epoch+1.
+        # Optimizer init must be set to warmup_start externally so epoch 1 starts there.
+        warmup_epochs = int(getattr(args, 'warmup_epochs', 8))
+        decay_gamma   = float(getattr(args, 'lr_decay_gamma', 0.92))
+        floor_ratio   = float(getattr(args, 'lr_floor_ratio', 0.01))
+        warmup_start  = args.learning_rate * 0.1
+        target_epoch  = epoch + 1
+        if target_epoch <= warmup_epochs:
+            frac = (target_epoch - 1) / max(warmup_epochs - 1, 1)
+            lr = warmup_start + (args.learning_rate - warmup_start) * frac
+        else:
+            k = target_epoch - warmup_epochs
+            lr = max(args.learning_rate * (decay_gamma ** k),
+                     args.learning_rate * floor_ratio)
+        lr_adjust = {epoch: lr}
     if epoch in lr_adjust.keys():
         lr = lr_adjust[epoch]
         for param_group in optimizer.param_groups:
@@ -32,7 +55,12 @@ def adjust_learning_rate(optimizer, epoch, args):
 
 
 class EarlyStopping:
-    def __init__(self, patience=7, verbose=False, delta=0):
+    """Track best score (lower-is-better) and save model when it improves.
+
+    `filename` lets the caller direct each instance to its own checkpoint file
+    so multiple EarlyStopping objects can run in parallel (e.g. one per metric).
+    """
+    def __init__(self, patience=7, verbose=False, delta=0, filename='checkpoint.pth'):
         self.patience = patience
         self.verbose = verbose
         self.counter = 0
@@ -40,6 +68,7 @@ class EarlyStopping:
         self.early_stop = False
         self.val_loss_min = np.inf
         self.delta = delta
+        self.filename = filename
 
     def __call__(self, val_loss, model, path):
         score = -val_loss
@@ -48,7 +77,7 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model, path)
         elif score < self.best_score + self.delta:
             self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            print(f'EarlyStopping[{self.filename}] counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -58,8 +87,8 @@ class EarlyStopping:
 
     def save_checkpoint(self, val_loss, model, path):
         if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), path + '/' + 'checkpoint.pth')
+            print(f'[{self.filename}] Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        torch.save(model.state_dict(), path + '/' + self.filename)
         self.val_loss_min = val_loss
 
 

@@ -286,19 +286,232 @@ def draw_dlinear_strict(seq_len_demo=6, pred_len_demo=4):
     plt.show()
 
 
+def draw_dlinearmix_block_flow(seq_len_demo=60, pred_len_demo=15, branch_in=3, exog_in=1):
+    """DLinearMix: EARLY fusion — concat (input_cols + exog_cols) along channels,
+    feed the mixed multivariate series through a single DLinear, target forecast.
+    """
+    fig, ax = plt.subplots(figsize=(16, 6.8))
+
+    _block(ax, 0.3, 4.3, 2.6, 1.5,
+           title=f"Input cols × {branch_in}",
+           subtitle=f"shape: (B, {seq_len_demo}, {branch_in})",
+           edge="#1f77b4", face="#e8f4fb")
+    _block(ax, 0.3, 1.6, 2.6, 1.5,
+           title=f"Exog cols × {exog_in}",
+           subtitle=f"shape: (B, {seq_len_demo}, {exog_in})",
+           edge="#b26a00", face="#fff3e0")
+
+    total = branch_in + exog_in
+    _block(ax, 3.6, 2.95, 2.6, 1.8,
+           title="Early Fusion",
+           subtitle=f"concat → (B, {seq_len_demo}, {total})",
+           edge="#444", face="#f2f2f2")
+
+    _block(ax, 7.0, 2.85, 3.4, 2.0,
+           title="DLinear",
+           subtitle="decomp + Linear_S + Linear_T",
+           edge="#2e7d32", face="#eaf7ea")
+
+    _block(ax, 11.2, 2.85, 2.8, 2.0,
+           title="Output ŷ",
+           subtitle=f"shape: (B, {pred_len_demo}, 1)",
+           edge="#d62728", face="#fdecec")
+
+    _arrow(ax, 2.9, 5.05, 3.6, 4.20, color="#1f77b4")
+    _arrow(ax, 2.9, 2.35, 3.6, 3.55, color="#b26a00")
+    _arrow(ax, 6.2, 3.85, 7.0, 3.85, text="mixed multivariate", color="#444", text_offset=(0, 0.25))
+    _arrow(ax, 10.4, 3.85, 11.2, 3.85, text="ŷ", color="#444", text_offset=(0, 0.25))
+
+    ax.text(7.0, 0.55, "DLinearMix: early concat (HL + rain/gate) → single DLinear",
+            ha="center", fontsize=10.5, color="dimgray")
+
+    ax.set_xlim(0.0, 14.5)
+    ax.set_ylim(0.0, 6.5)
+    ax.axis("off")
+    plt.tight_layout()
+    plt.show()
+
+
+def draw_dlinearmix2_block_flow(seq_len_demo=60, pred_len_demo=15, branch_in=3, exog_in=2,
+                                exog_emb_dim=16, fusion_hidden_dim=32, flatten_fusion=False):
+    """DLinearMix2: per-channel DLinear branches + GRU exogenous encoder + fusion MLP.
+
+    Faithful to models/DLinearMix2.py:
+      input_cols[i] -> DLinearBranch_i -> [B,P,1]
+      concat across i -> branch_preds [B,P,K]
+      exog_cols  -> GRU encoder -> context [B, E]
+      HorizonWiseFusion(False) or FlattenFusion(True) -> ŷ [B, P, 1]
+    """
+    fig, ax = plt.subplots(figsize=(17, 8.6))
+
+    # ----- Left: input channels (each gets its own DLinear branch) -----
+    branch_y_top = 7.5
+    branch_gap = 1.05
+    branch_box_h = 0.78
+    branch_xs = (0.4, 3.4)
+
+    for i in range(branch_in):
+        y_in = branch_y_top - i * branch_gap
+        _block(ax, branch_xs[0], y_in, 1.7, branch_box_h,
+               title=f"x_input[{i}]",
+               subtitle=f"(B,{seq_len_demo},1)",
+               edge="#1f77b4", face="#e8f4fb", title_size=10)
+
+        _block(ax, branch_xs[1], y_in - 0.05, 2.6, branch_box_h + 0.1,
+               title=f"DLinearBranch_{i}",
+               subtitle="decomp + Lin_S + Lin_T",
+               edge="#2e7d32", face="#eaf7ea", title_size=10)
+
+        _arrow(ax, branch_xs[0] + 1.7, y_in + branch_box_h / 2,
+               branch_xs[1], y_in + branch_box_h / 2,
+               color="#2e7d32", lw=1.2)
+
+    # ----- Left bottom: exogenous channels + GRU -----
+    exog_y = branch_y_top - branch_in * branch_gap - 0.6
+    _block(ax, branch_xs[0], exog_y - 0.4, 1.7, 1.1,
+           title=f"x_exog × {exog_in}",
+           subtitle=f"(B,{seq_len_demo},{exog_in})",
+           edge="#b26a00", face="#fff3e0", title_size=10)
+
+    _block(ax, branch_xs[1], exog_y - 0.4, 2.6, 1.1,
+           title="GRU Encoder",
+           subtitle=f"emb_dim={exog_emb_dim}",
+           edge="#b26a00", face="#fff3e0", title_size=10)
+    _arrow(ax, branch_xs[0] + 1.7, exog_y + 0.15,
+           branch_xs[1], exog_y + 0.15, color="#b26a00", lw=1.2)
+
+    # ----- Middle: concat point for branches -----
+    concat_x = 7.0
+    concat_y_top = branch_y_top + branch_box_h / 2
+    concat_y_bot = branch_y_top + branch_box_h / 2 - (branch_in - 1) * branch_gap
+    branch_concat_y = (concat_y_top + concat_y_bot) / 2
+
+    _block(ax, concat_x, branch_concat_y - 0.55, 1.9, 1.1,
+           title="concat",
+           subtitle=f"branch_preds\n(B,{pred_len_demo},{branch_in})",
+           edge="#444", face="#fafafa", title_size=11)
+
+    for i in range(branch_in):
+        y_out = branch_y_top + branch_box_h / 2 - i * branch_gap
+        _arrow(ax, branch_xs[1] + 2.6, y_out, concat_x, branch_concat_y,
+               color="#2e7d32", lw=1.0, rad=0.0)
+
+    # Exog context arrow up to fusion
+    context_x = concat_x + 1.0
+    _arrow(ax, branch_xs[1] + 2.6, exog_y + 0.15,
+           context_x, exog_y + 0.15,
+           text=f"context (B,{exog_emb_dim})", color="#b26a00",
+           text_offset=(0.4, 0.25), lw=1.2)
+
+    # ----- Right: Fusion MLP -----
+    fusion_x = 10.4
+    fusion_y = branch_concat_y - 0.7
+    fusion_title = "FlattenFusion" if flatten_fusion else "HorizonWiseFusion"
+    if flatten_fusion:
+        fusion_sub = f"in: P·K+E = {pred_len_demo*branch_in + exog_emb_dim}\nhidden={max(fusion_hidden_dim, 64)}"
+    else:
+        fusion_sub = f"per-horizon MLP\nin=K+E={branch_in + exog_emb_dim}, hid={fusion_hidden_dim}"
+
+    _block(ax, fusion_x, fusion_y, 3.2, 2.0,
+           title=fusion_title, subtitle=fusion_sub,
+           edge="#6a1b9a", face="#f3e5f5", title_size=11)
+
+    _arrow(ax, concat_x + 1.9, branch_concat_y, fusion_x, fusion_y + 1.4,
+           color="#2e7d32", lw=1.3)
+    _arrow(ax, context_x, exog_y + 0.15, fusion_x, fusion_y + 0.4,
+           color="#b26a00", lw=1.3, rad=-0.18)
+
+    # ----- Output -----
+    _block(ax, 14.1, fusion_y + 0.2, 2.4, 1.6,
+           title="Output ŷ",
+           subtitle=f"(B,{pred_len_demo},1)",
+           edge="#d62728", face="#fdecec")
+    _arrow(ax, fusion_x + 3.2, fusion_y + 1.0, 14.1, fusion_y + 1.0,
+           text="ŷ", color="#444", text_offset=(0, 0.22), lw=1.4)
+
+    fusion_label = "flatten" if flatten_fusion else "horizon-wise"
+    ax.text(8.5, 0.5,
+            f"DLinearMix2: per-channel DLinear branches + GRU exog encoder + {fusion_label} fusion MLP",
+            ha="center", fontsize=10.5, color="dimgray")
+
+    ax.set_xlim(0.0, 17.0)
+    ax.set_ylim(0.0, 9.0)
+    ax.axis("off")
+    plt.tight_layout()
+    plt.show()
+
+
+def draw_for_model(model_name: str, seq_len_demo, pred_len_demo, channels_demo,
+                   branch_in, exog_in, style, flatten_fusion):
+    key = model_name.lower()
+    if key in ("dlinear", "linear", "nlinear"):
+        if style == "neuron":
+            draw_dlinear_strict(seq_len_demo=seq_len_demo, pred_len_demo=pred_len_demo)
+        else:
+            draw_dlinear_block_flow(
+                seq_len_demo=seq_len_demo,
+                pred_len_demo=pred_len_demo,
+                channels_demo=channels_demo,
+            )
+    elif key == "dlinearmix":
+        draw_dlinearmix_block_flow(
+            seq_len_demo=seq_len_demo,
+            pred_len_demo=pred_len_demo,
+            branch_in=branch_in,
+            exog_in=exog_in,
+        )
+    elif key == "dlinearmix2":
+        draw_dlinearmix2_block_flow(
+            seq_len_demo=seq_len_demo,
+            pred_len_demo=pred_len_demo,
+            branch_in=branch_in,
+            exog_in=exog_in,
+            flatten_fusion=flatten_fusion,
+        )
+    else:
+        raise ValueError(
+            f"Unknown --model '{model_name}'. "
+            f"Supported: DLinear, Linear, NLinear, DLinearMix, DLinearMix2."
+        )
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Visualize DLinear architecture")
-    parser.add_argument("--style", type=str, default="block", choices=["block", "neuron"], help="diagram style")
-    parser.add_argument("--seq_len_demo", type=int, default=6)
-    parser.add_argument("--pred_len_demo", type=int, default=4)
-    parser.add_argument("--channels_demo", type=int, default=1)
+    parser = argparse.ArgumentParser(description="Visualize model architecture")
+    parser.add_argument("--model", type=str, default=None,
+                        help="Model name: DLinear / Linear / NLinear / DLinearMix / DLinearMix2. "
+                             "If given, overrides --style for DLinearMix*.")
+    parser.add_argument("--style", type=str, default="block", choices=["block", "neuron"],
+                        help="Diagram style for DLinear-family. Ignored for DLinearMix*.")
+    parser.add_argument("--seq_len_demo", type=int, default=60)
+    parser.add_argument("--pred_len_demo", type=int, default=15)
+    parser.add_argument("--channels_demo", type=int, default=1,
+                        help="Channels demo, used by single-channel DLinear block diagram.")
+    parser.add_argument("--branch_in", type=int, default=3,
+                        help="Number of input channels for DLinearMix / DLinearMix2 diagrams.")
+    parser.add_argument("--exog_in", type=int, default=2,
+                        help="Number of exogenous channels for DLinearMix / DLinearMix2 diagrams.")
+    parser.add_argument("--flatten_fusion", action="store_true",
+                        help="DLinearMix2 only: draw with FlattenFusion instead of HorizonWiseFusion.")
     args = parser.parse_args()
 
-    if args.style == "neuron":
-        draw_dlinear_strict(seq_len_demo=args.seq_len_demo, pred_len_demo=args.pred_len_demo)
-    else:
-        draw_dlinear_block_flow(
+    if args.model is not None:
+        draw_for_model(
+            model_name=args.model,
             seq_len_demo=args.seq_len_demo,
             pred_len_demo=args.pred_len_demo,
             channels_demo=args.channels_demo,
+            branch_in=args.branch_in,
+            exog_in=args.exog_in,
+            style=args.style,
+            flatten_fusion=args.flatten_fusion,
         )
+    else:
+        # Backwards compatible: no --model → original DLinear behavior.
+        if args.style == "neuron":
+            draw_dlinear_strict(seq_len_demo=args.seq_len_demo, pred_len_demo=args.pred_len_demo)
+        else:
+            draw_dlinear_block_flow(
+                seq_len_demo=args.seq_len_demo,
+                pred_len_demo=args.pred_len_demo,
+                channels_demo=args.channels_demo,
+            )
