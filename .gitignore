@@ -1,5 +1,44 @@
-checkpoints
-dataset
-test_results
-runs
-analysis
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ── Virtual environments ──
+.venv/
+.HLML_Linear_venv/
+venv/
+env/
+
+# ── OS / editor cruft ──
+.DS_Store
+*.swp
+
+# ── ML data / outputs (大檔、可重生) ──
+dataset/
+checkpoints/
+runs/
+runs_sanity/
+runs_sanity_seg/
+test_results/
+logs/
+analysis/
+
+# ── Local agent / tooling state ──
+.claude/
+
+# ── Node ──
+node_modules/
+
+# ── Private drafts (不上傳) ──
+meeting_recap.txt
+sh.txt
+
+# ── Secrets (預防性，目前無) ──
+.env
+*.env
+!.env.example
+*.pem
+*.key
