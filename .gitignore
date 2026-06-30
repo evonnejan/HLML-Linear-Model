@@ -28,6 +28,7 @@ analysis/
 
 # ── Local agent / tooling state ──
 .claude/
+docs/superpowers/
 
 # ── Node ──
 node_modules/
