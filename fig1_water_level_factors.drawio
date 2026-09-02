@@ -1,0 +1,52 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="圖一-影響水位變動之因子" id="fig1">
+    <mxGraphModel dx="1006" dy="659" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="560" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" value="圖一、影響水位變動之因子" vertex="1">
+          <mxGeometry height="30" width="360" x="240" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="m9M0FArXbIqJpVueeVUS-1" edge="1" parent="1" source="center" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6C8EBF;endArrow=none;endFill=0;strokeWidth=2;" target="cat1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m9M0FArXbIqJpVueeVUS-2" edge="1" parent="1" source="center" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;endArrow=none;endFill=0;strokeColor=#6C8EBF;" target="cat3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="center" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=16;fontStyle=1;" value="水位變化" vertex="1">
+          <mxGeometry height="90" width="130" x="60" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="cat1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="下水道水位計" vertex="1">
+          <mxGeometry height="50" width="140" x="240" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="cat2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="&lt;font style=&quot;&quot;&gt;氣象署雨量站&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="140" x="240" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="cat3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="水利署水資源物聯網感測資料" vertex="1">
+          <mxGeometry height="50" width="140" x="240" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="sub1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="各測站水位&lt;br&gt;（時間戳 · 地點 · 水位值）" vertex="1">
+          <mxGeometry height="60" width="200" x="405" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="sub2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="多時窗累積雨量&lt;br&gt;（Past10Min · Past1Hr · ...）" vertex="1">
+          <mxGeometry height="60" width="200" x="405" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="sub3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="閘門 · 抽水機組&lt;div&gt;(閘門開度&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;· 抽水馬達運作狀態&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;· ...&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;)&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="405" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="center" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;strokeWidth=2;" target="cat2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="cat1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#82b366;strokeWidth=2;" target="sub1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="cat2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#82b366;strokeWidth=2;" target="sub2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="cat3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#82b366;strokeWidth=2;" target="sub3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

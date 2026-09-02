@@ -1,0 +1,79 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="圖二-技術架構流程" id="fig2">
+    <mxGraphModel dx="1118" dy="732" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="560" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-23" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-2" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" value="&lt;span style=&quot;font-size: 13px;&quot;&gt;資料庫擷取&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="100" x="185" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-25" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-7">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="330" y="270" />
+              <mxPoint x="330" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-26" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;font-size: 13px;&quot;&gt;資料整合與前處理&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;font-size: 13px;&quot;&gt;(資料清理, 時間對齊, ...)&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="150" x="160" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-27" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-9">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="510" y="220" />
+              <mxPoint x="510" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-7" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;shapeInside=1;fixedSize=1;" value="X: 前置水位計水位值、雨量資料、閘門資料" vertex="1">
+          <mxGeometry height="60" width="160" x="340" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-31" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-9">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="510" y="320" />
+              <mxPoint x="510" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-8" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;shapeInside=1;fixedSize=1;" value="Y: 目標站未來水位" vertex="1">
+          <mxGeometry height="60" width="160" x="340" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-17" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-9" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="資料建模&lt;br&gt;(時序深度學習)" vertex="1">
+          <mxGeometry height="60" width="120" x="527" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-18" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-10" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="未來水位預測&lt;br&gt;(直接多步預測)" vertex="1">
+          <mxGeometry height="60" width="120" x="670" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-22" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tWg0uQgqY4qUFpJwwYzZ-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-32" edge="1" parent="1" source="tWg0uQgqY4qUFpJwwYzZ-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;dashed=1;" target="tWg0uQgqY4qUFpJwwYzZ-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-11" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="計算評估指標&lt;div&gt;(RMSE / Corr.)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="810" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-20" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="修正模型" vertex="1">
+          <mxGeometry height="30" width="60" x="700" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="tWg0uQgqY4qUFpJwwYzZ-21" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="地理資訊平台展示" vertex="1">
+          <mxGeometry height="60" width="120" x="950" y="240" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
