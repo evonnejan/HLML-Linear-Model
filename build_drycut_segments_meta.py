@@ -79,6 +79,11 @@ def main() -> None:
     parser.add_argument("--all-csv", default=ALL_CSV)
     parser.add_argument("--rain-col", default=RAIN_COL)
     parser.add_argument("--out", default=None, help="輸出路徑（預設依參數自動命名）")
+    parser.add_argument("--emit-training-csv", action="store_true",
+                        help="產完 meta 後接著組裝訓練 CSV（呼叫 build_training_csv_from_meta）。"
+                             "若既有輸出的來源指紋未變則自動跳過，不會重複產出相同大檔。")
+    parser.add_argument("--training-csv-out", default=None,
+                        help="搭配 --emit-training-csv 使用；預設依 meta 檔名自動命名")
     args = parser.parse_args()
 
     l_minutes = int(args.l_hours * 60)
@@ -115,6 +120,18 @@ def main() -> None:
     print(f"參數: L={args.l_hours:g}h, buffer={buf}min, rain_col={args.rain_col}")
     print(f"segments={len(meta)}  保留 {kept_min:,}/{total:,} 分鐘 ({kept_min/total*100:.1f}%)")
     print_duration_stats(meta)
+
+    if args.emit_training_csv:
+        # 延後 import：不加此旗標時不必付組裝腳本的載入成本
+        from build_training_csv_from_meta import build_training_csv
+
+        print(f"\n{'-' * 60}\n組裝訓練 CSV\n{'-' * 60}")
+        build_training_csv(
+            out,
+            all_csv=args.all_csv,
+            out=args.training_csv_out,
+            skip_if_current=True,
+        )
 
 
 if __name__ == "__main__":

@@ -50,6 +50,8 @@ def data_provider(args, flag):
             exog_col=getattr(args, 'exog_col', None),
             segment_col=args.segment_col,
             model_name=getattr(args, 'model', None),
+            split_file=getattr(args, 'split_file', None),
+            fold=getattr(args, 'fold', None),
         ))
 
     data_set = Data(**common_kwargs)

@@ -235,6 +235,12 @@ def main():
     parser.add_argument('--input_col', type=str, default=None, help='input column(s), e.g., HL02 or HL02,HL03')
     parser.add_argument('--exog_col', type=str, default=None, help='optional exogenous column(s), e.g., isRain or isRain,HL06')
     parser.add_argument("--segment_col", type=str, default=None, help="e.g., segment_id; if set, windows will not cross segments")
+    parser.add_argument("--split_file", type=str, default=None,
+                        help="segment-wise split assignment CSV from build_splits.py; "
+                             "overrides the built-in chronological 70/10/rest split")
+    parser.add_argument("--fold", type=int, default=None,
+                        help="use fold_<k> column of --split_file for train/val (rolling-origin CV); "
+                             "test hold-out stays fixed across folds")
     parser.add_argument('--target', type=str, default='HL01', help='target feature in S or MS task')
     parser.add_argument('--freq', type=str, default='min', help='freq for time features encoding, options:[s, min, h, D, B, W, ME]')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')

@@ -16,7 +16,7 @@ class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv', input_col=None, exog_col=None, segment_col=None,
                  target='OT', stride=1, scale=True, timeenc=0, freq='h', train_only=False,
-                 model_name=None):
+                 model_name=None, split_file=None, fold=None):
         # size [seq_len, label_len, pred_len] — required, no default.
         # label_len is currently unused by the linear-style models but kept
         # in the signature for backwards compatibility with the dataset API.
@@ -44,10 +44,60 @@ class Dataset_Custom(Dataset):
         self.timeenc = timeenc
         self.freq = freq
         self.train_only = train_only
+        self.split_file = split_file
+        self.fold = fold
 
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
+
+    def _load_split_file(self, seg_col, seg_ids_sorted):
+        """讀取 build_splits.py 產生的 segment-wise split 指派。
+
+        - fold 為 None：使用 `split` 欄（train/val/test）。
+        - fold=k     ：使用 `fold_k` 欄決定 train/val（rolling-origin expanding window），
+                       test 仍取自 `split` 欄，確保 final hold-out 在所有 fold 間固定不變。
+        回傳的 id 皆依 seg_ids_sorted 的時間順序排列。
+        """
+        split_df = pd.read_csv(self.split_file)
+        split_df.columns = [c.lstrip('﻿') for c in split_df.columns]
+        if seg_col not in split_df.columns:
+            raise ValueError(f"split_file 缺少 '{seg_col}' 欄: {self.split_file}")
+        if "split" not in split_df.columns:
+            raise ValueError(f"split_file 缺少 'split' 欄: {self.split_file}")
+
+        base = dict(zip(split_df[seg_col], split_df["split"].astype(str)))
+        missing = [sid for sid in seg_ids_sorted if sid not in base]
+        if missing:
+            raise ValueError(
+                f"split_file 未涵蓋 {len(missing)} 個 segment（例如 {missing[:5]}）: {self.split_file}"
+            )
+
+        assign = dict(base)
+        if self.fold is not None:
+            col = f"fold_{int(self.fold)}"
+            if col not in split_df.columns:
+                have = [c for c in split_df.columns if c.startswith("fold_")]
+                raise ValueError(f"split_file 沒有 '{col}' 欄（可用: {have}）: {self.split_file}")
+            fold_map = dict(zip(split_df[seg_col], split_df[col].fillna("").astype(str)))
+            # test 固定沿用 base；dev 內的 train/val 由 fold 欄決定，空字串代表該 fold 不使用
+            assign = {
+                sid: ("test" if base[sid] == "test" else (fold_map.get(sid, "") or "unused"))
+                for sid in seg_ids_sorted
+            }
+
+        train_ids = [sid for sid in seg_ids_sorted if assign[sid] == "train"]
+        val_ids = [sid for sid in seg_ids_sorted if assign[sid] == "val"]
+        test_ids = [sid for sid in seg_ids_sorted if assign[sid] == "test"]
+        unused = [sid for sid in seg_ids_sorted if assign[sid] == "unused"]
+
+        tag = f"fold_{self.fold}" if self.fold is not None else "split"
+        print(
+            f"[split_file] {os.path.basename(str(self.split_file))} ({tag}): "
+            f"train={len(train_ids)} val={len(val_ids)} test={len(test_ids)}"
+            + (f" unused={len(unused)}" if unused else "")
+        )
+        return train_ids, val_ids, test_ids
 
     @staticmethod
     def _parse_col_spec(col_spec):
@@ -102,6 +152,10 @@ class Dataset_Custom(Dataset):
                 train_ids = seg_ids_sorted
                 val_ids = []
                 test_ids = []
+            elif getattr(self, "split_file", None):
+                # 外部指定的 segment-wise split（build_splits.py 產生）。
+                # split 決策抽離到 loader 之外，換切法不需動訓練碼。
+                train_ids, val_ids, test_ids = self._load_split_file(seg_col, seg_ids_sorted)
             else:
                 train_n = max(1, int(nseg * 0.7))
                 val_n = max(1, int(nseg * 0.1))

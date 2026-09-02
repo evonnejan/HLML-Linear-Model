@@ -26,6 +26,7 @@ meta 無關規則：任何含
 輸出: dataset/train_<meta 檔名去掉 rain_segments_meta_ 前綴>.csv
 """
 import argparse
+import hashlib
 from pathlib import Path
 
 import pandas as pd
@@ -44,6 +45,31 @@ GATE_COLS = [
 
 SEGMENT_COLS = ["date", "SegmentStart", "SegmentEnd", "segment_id", "WinStart", "WinEnd", "isRain"]
 META_REQUIRED = ["segment_id", "SegmentStart", "SegmentEnd", "WinStart", "WinEnd"]
+
+RAIN_COL = "Past10Min"
+MIN_SINCE_RAIN_COL = "min_since_rain"
+
+
+def add_min_since_rain(wide: pd.DataFrame, rain_col: str = RAIN_COL) -> pd.DataFrame:
+    """在**切段前**於全年寬表上計算「距上次降雨的分鐘數」。
+
+    必須全域計算：若切段後才算，每段開頭會被迫從 0 重新計數，
+    而 segment 開頭正是「剛下過雨」或「退水中」的狀態，重算會抹掉這個資訊。
+
+    定義與 eval_dry.py 的 minutes_since_last_rain 一致：
+    以 rain_col > 0 為「有雨」，該分鐘計為 0，其後逐分鐘累加。
+    資料開頭尚未出現任何雨之前為 NaN（無從得知距離）。
+    """
+    if rain_col not in wide.columns:
+        raise ValueError(f"寬表缺少 {rain_col}，無法計算 {MIN_SINCE_RAIN_COL}。")
+
+    wet = wide[rain_col] > 0
+    # 每個 wet 分鐘開一個新群組；群組內的序號即距上次降雨的分鐘數
+    grp = wet.cumsum()
+    wide = wide.copy()
+    wide[MIN_SINCE_RAIN_COL] = wide.groupby(grp).cumcount().astype("float64")
+    wide.loc[grp == 0, MIN_SINCE_RAIN_COL] = pd.NA  # 首次降雨之前無定義
+    return wide
 
 
 def slice_segments(wide: pd.DataFrame, meta: pd.DataFrame) -> pd.DataFrame:
@@ -115,36 +141,67 @@ def report(df: pd.DataFrame, meta: pd.DataFrame, seq_len: int, pred_len: int) ->
             print(f"  {col:<26} {cnt:>8,}  ({cnt / len(df) * 100:5.2f}%)")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--meta", required=True, help="segment meta CSV（drycut 或舊版皆可）")
-    parser.add_argument("--all-csv", default=ALL_CSV, help="逐分鐘寬表")
-    parser.add_argument("--out", default=None, help="輸出路徑（預設依 meta 檔名自動命名）")
-    parser.add_argument("--seq-len", type=int, default=96, help="僅用於報表估算 window 數")
-    parser.add_argument("--pred-len", type=int, default=15, help="僅用於報表估算 window 數")
-    args = parser.parse_args()
+def default_out_path(meta_path: str) -> str:
+    stem = Path(meta_path).stem
+    for prefix in ("rain_segments_meta_", "segments_meta_", "rain_segments_meta"):
+        if stem.startswith(prefix):
+            stem = stem[len(prefix):] or "old"
+            break
+    return f"dataset/train_{stem}.csv"
 
-    meta = pd.read_csv(args.meta, parse_dates=["SegmentStart", "SegmentEnd", "WinStart", "WinEnd"])
+
+def _fingerprint(meta_path: str, all_csv: str, opts: dict) -> str:
+    """meta 內容 + 寬表識別 + 產生選項的指紋，用來判斷既有輸出是否已是最新。"""
+    h = hashlib.sha256()
+    h.update(Path(meta_path).read_bytes())
+    st = Path(all_csv).stat()
+    h.update(f"{all_csv}|{st.st_size}|{int(st.st_mtime)}".encode())
+    h.update(repr(sorted(opts.items())).encode())
+    return h.hexdigest()
+
+
+def build_training_csv(
+    meta_path: str,
+    *,
+    all_csv: str = ALL_CSV,
+    out: str | None = None,
+    seq_len: int = 96,
+    pred_len: int = 15,
+    rain_col: str = RAIN_COL,
+    add_msr: bool = True,
+    skip_if_current: bool = False,
+) -> str:
+    """組裝訓練 CSV；回傳輸出路徑。可被其他腳本直接呼叫。
+
+    skip_if_current=True 時，若既有輸出的來源指紋未變則跳過重算，
+    避免同一組 meta 反覆產出一模一樣的大檔。
+    """
+    meta = pd.read_csv(meta_path, parse_dates=["SegmentStart", "SegmentEnd", "WinStart", "WinEnd"])
     missing = [c for c in META_REQUIRED if c not in meta.columns]
     if missing:
         raise ValueError(f"meta 缺少必要欄位: {missing}")
 
-    out = args.out
-    if out is None:
-        stem = Path(args.meta).stem
-        for prefix in ("rain_segments_meta_", "segments_meta_", "rain_segments_meta"):
-            if stem.startswith(prefix):
-                stem = stem[len(prefix):] or "old"
-                break
-        out = f"dataset/train_{stem}.csv"
+    out = out or default_out_path(meta_path)
+    stamp = Path(out).with_suffix(".source.sha256")
+    fp = _fingerprint(meta_path, all_csv, {"rain_col": rain_col, "add_msr": add_msr})
 
-    print(f"meta   : {args.meta}（{len(meta)} 段）")
-    print(f"寬表   : {args.all_csv}")
+    if skip_if_current and Path(out).exists() and stamp.exists() and stamp.read_text().strip() == fp:
+        print(f"[skip] {out} 已是最新（來源指紋未變），不重複產生。")
+        return out
+
+    print(f"meta   : {meta_path}（{len(meta)} 段）")
+    print(f"寬表   : {all_csv}")
     check_no_overlap(meta)
 
-    wide = pd.read_csv(args.all_csv, parse_dates=["date"]).sort_values("date").reset_index(drop=True)
+    wide = pd.read_csv(all_csv, parse_dates=["date"]).sort_values("date").reset_index(drop=True)
     print(f"  寬表 {len(wide):,} 列 x {len(wide.columns)} 欄，"
           f"範圍 {wide['date'].min()} ~ {wide['date'].max()}")
+
+    if add_msr:
+        wide = add_min_since_rain(wide, rain_col)
+        msr = wide[MIN_SINCE_RAIN_COL]
+        print(f"  已加 {MIN_SINCE_RAIN_COL}（全域計算）：中位 {msr.median():.0f} 分鐘、"
+              f"max {msr.max():.0f}、首次降雨前 NaN {int(msr.isna().sum()):,} 列")
 
     df = slice_segments(wide, meta)
     df = fill_gate_within_segment(df)
@@ -156,8 +213,36 @@ def main() -> None:
 
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False, encoding="utf-8-sig")
+    stamp.write_text(fp)
     print(f"\n輸出: {out}  ({len(df.columns)} 欄)")
-    report(df, meta, args.seq_len, args.pred_len)
+    report(df, meta, seq_len, pred_len)
+    return out
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--meta", required=True, help="segment meta CSV（drycut 或舊版皆可）")
+    parser.add_argument("--all-csv", default=ALL_CSV, help="逐分鐘寬表")
+    parser.add_argument("--out", default=None, help="輸出路徑（預設依 meta 檔名自動命名）")
+    parser.add_argument("--seq-len", type=int, default=96, help="僅用於報表估算 window 數")
+    parser.add_argument("--pred-len", type=int, default=15, help="僅用於報表估算 window 數")
+    parser.add_argument("--rain-col", default=RAIN_COL, help=f"計算 {MIN_SINCE_RAIN_COL} 用的雨量欄")
+    parser.add_argument("--no-min-since-rain", action="store_true",
+                        help=f"不產生 {MIN_SINCE_RAIN_COL} 欄")
+    parser.add_argument("--skip-if-current", action="store_true",
+                        help="既有輸出的來源指紋未變時跳過重算")
+    args = parser.parse_args()
+
+    build_training_csv(
+        args.meta,
+        all_csv=args.all_csv,
+        out=args.out,
+        seq_len=args.seq_len,
+        pred_len=args.pred_len,
+        rain_col=args.rain_col,
+        add_msr=not args.no_min_since_rain,
+        skip_if_current=args.skip_if_current,
+    )
 
 
 if __name__ == "__main__":
