@@ -7,18 +7,23 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-06-30T14:06:38+08:00
-- **Current goal:** 建立 GitHub repo + 進度追蹤系統（CLAUDE.md/PROGRESS.md）並完成首次整理性 push。
-- **Status (one line):** 階段一（推上 GitHub）+ 階段二（CLAUDE.md）完成；本檔為階段三產出的第一版 PROGRESS.md。
+- **Last updated:** 2026-09-02T15:33:47+08:00
+- **Current goal:** drycut 切分參數已定案（**L=3h, buffer=60min**），正式 meta 已產出。下一步是補上「meta → 訓練 CSV」的組裝腳本（目前缺這一支），接回 `data_provider/`，然後開始 roadmap #1 delta-target。
+- **Status (one line):** `dataset/rain_segments_meta_drycut_L3h_buf60.csv` 已產出並驗證（179 段 / 54,590 分鐘 / 10.7% / **0 重疊**、最小相鄰間隔 61min），**179 段全部可生訓練 window**（seq_len≤96 時）；但**尚無腳本把 meta + all_minute_wide 組成訓練 CSV**，pipeline 在此斷開。
 - **Next steps:**
-  - 詢問使用者是否將 `CLAUDE.md` + `PROGRESS.md` 一起 commit & push。
-  - （可選）為 `Source_Code/`（DLinear 原始參考碼，Apache-2.0）補上來源/授權 NOTICE。
-- **Open questions / blockers:** 無 blocker。待決：上述 commit/push 與 Source_Code NOTICE。
+  1. **寫組裝腳本**（目前缺）：`meta + dataset/all_minute_wide.csv`(23 欄) → 訓練 CSV(29 欄，比照 `water_level_rain_gate_all.csv`)。要補的 6 欄：`SegmentStart`/`SegmentEnd`/`segment_id`/`WinStart`/`WinEnd`（從 meta 貼）、`isRain`（從 `Past10Min` 依新定義導出）。
+  2. （建議）跑 `python visualize_drycut_segments.py --meta dataset/rain_segments_meta_drycut_L3h_buf60.csv` 產正式版檢視圖再抽查。
+  3. 用新 CSV 重訓一版當 baseline（`--segment_col segment_id`，loader 自行依 SegmentStart 排序切 70/10/rest）。
+  4. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
+- **Open questions / blockers:** 無 blocker。待決：split 方式（目前沿用 loader 內建 70/10/rest；隨機 per-segment 暫緩）；exog 路徑是否有效（待 #2 ablation）；**buffer=60 讓 5/20「後置 60min 混合動態」的疑慮重新浮現**（見 `docs/model_roadmap.md` 第 5 節）。資料來源為本機 `dataset/all_minute_wide.csv`（2026-06-02 產，2024-08-13 16:01~2025-08-03 23:59，511,679 分鐘），**未重抓 SQL**；要延長範圍需回 SQL 環境重跑 `Data_From_SQL_all.py`。
 - **Must-know handoff points:**
-  - Repo：`github.com/evonnejan/HLML-Linear-Model`，預設分支 `main`，本機與 origin 同步於 `df511c1`。
-  - DB 連線**不可寫死帳密**：用 Windows 整合驗證或 `os.getenv("DB_PASSWORD")`。
-  - 大型/可重生輸出（`dataset/ checkpoints/ runs*/ test_results/ logs/ analysis/`）已 gitignore，勿加回。
-  - 本機尚有兩個 venv：`.venv/`（Python 3.14.3）、`.HLML_Linear_venv/`，皆已 gitignore。
+  - **系統定位（2026-09-02 定案）**：**即時預警系統**；虛擬水位量測是更長遠目標。此定位決定 delta-target 可行（推論時有 HL01 當下值當錨）；若日後轉向虛擬量測，roadmap #1/#4 需重新設計。
+  - **核心發現**：HL01 不在 input（input=HL02–06+exog）→ 無 level 錨 → 每 window 固定偏移；persistence 因此贏 raw 模型（raw MSE 20884 / anchored 1537 / persist 2430；Corr 0.819→0.988）。
+  - **原則**：不放 HL01 自身歷史當 input（會自迴歸依賴）；用 HL01 最後值當外部錨可以。主指標 = **correlation**。
+  - **L 與 buffer 的作用**：L 決定「多長的無雨算確定乾、要剔除」→ 控制切點與段數；buffer 決定「每段兩端往被剔除的乾段延伸多少」→ 保留退水尾巴並救活短段。約束 `L >= 2*buffer` 保證相鄰 window 不重疊（結構性避免 leakage，舊法沒有這個保證）。
+  - **可用段門檻 = `seq_len + pred_len`，不是固定值**（舊紀錄誤用 75min）。seq_len=96 → 111min；`run.py` 預設 seq_len=60 → 75min。L=3h/buf=60 下 seq_len≤96 皆 179/179 可用，seq_len≥120 開始出現死段。
+  - anchored 工具：`compute_anchored_mse.py`（raw/adj/persist 的 MSE/RMSE/MAE/Corr + 逐 horizon Corr）、`visualize_segment.py`、`slide_anchored_figure.py`、`visualize_anchored.py`；乾段 anchored 直接讀 `eval_dry/*/predictions.npz` 的 `persist`。
+  - Repo：`github.com/evonnejan/HLML-Linear-Model`；DB 不可寫死帳密；大型輸出（含 `dataset/`、`analysis/`）已 gitignore。
 
 ---
 
@@ -31,6 +36,10 @@
 | 2026-06-30 | backlog 依主題拆 5 個 commit | 歷史清楚、便於回溯 | 單一大 commit（被否決：歷史過粗） |
 | 2026-06-30 | `docs/superpowers/`、`meeting_recap.txt`、`sh.txt` 不上傳 | 本地工具文件/私人草稿 | 上傳（依使用者意願否決） |
 | 2026-06-30 | 新增 `CLAUDE.md` 為常駐指令、自動維護 `PROGRESS.md` | 跨 session 冷啟動接手 | 僅靠 auto-memory（不足以承載專案級進度） |
+| 2026-06-30 | level bias 治法選 **delta-target**（非 NLinear/RevIN/後處理） | NLinear 錨到 input(鄰站)非 HL01；RevIN 需 HL01 歷史統計(違反原則)；後處理非 end-to-end。delta-target 錨對 HL01、只用最後值、架構不動 | NLinear（否決:錨錯通道）／RevIN（否決:需 HL01 歷史）／續用後處理 anchoring（否決:形狀沒被訓練優化） |
+| 2026-09-02 | 系統定位＝**即時預警**，虛擬水位量測列為長遠目標 | 即時預警推論時有 HL01 當下值可當錨 → delta-target 可行；虛擬量測沒有 HL01，該路不通（`meeting_recap.txt` 5/20 已註明） | 直接做虛擬量測（否決：會封死 roadmap #1/#4） |
+| 2026-09-02 | drycut 定 **L=3h, buffer=60min** | buf=60 是唯一讓 179 段 100% 可生訓練 window 的設定（buf=0 僅 72 段、buf=30 僅 98 段），且 34,900 win 已超過舊法 32,999；L 在 buf=60 下不敏感，選 3 保留最多段數與最細事件粒度 | buf=90（否決：多出的 1 萬 win 是純乾 padding）／L=4~6（否決：段數更少、無額外好處）／另立小碎段丟棄規則（否決：buf=60 後問題自動消失） |
+| 2026-06-30 | 不放 HL01 自身歷史當 input；主指標用 correlation | 放 HL01 歷史會自迴歸過度依賴(試過)；level 可校正、變化形式才是學的重點 | 加 HL01 自迴歸（否決） |
 
 ---
 
@@ -47,17 +56,94 @@
 - `analyze_*.py` — best-model overview、full inference(+lag)、rain-outside-segments、anchored MSE 等分析。
 - `compute_anchored_mse.py` / `list_rain_outside_segments.py` — anchored MSE 計算與降雨外 segment 分析。
 - `eval_dry.py` + `scripts/draw_eval_dry_diagrams.py` — 乾期評估與圖表。
+- `analyze_dry_runs.py` / `build_drycut_segments_meta.py` / `visualize_drycut_segments.py` — 乾段反向切分法 drycut（7/2 起）：可行性統計、meta 產生（L/buffer 參數化、無 split）、切分結果檢視圖（英文、附 dry gap 標註）。
 - `visualize.py` / `model_visualize.py` / `visualize_anchored.py` / `visualize_segment.py` / `slide_anchored_figure.py` — 視覺化。
 - `utils/` — `metrics.py`、`tools.py`、`timefeatures.py`。
 - `Source_Code/` — DLinear 原始參考碼（LTSF-Linear，Apache-2.0）：`DLinear/Linear/NLinear.py`、`exp_*`、`data_*`。
 - `run_dlinearmix2_sweep*.sh` — 掃參腳本（base / criterion / noHL01 變體）。
 - `tests/test_merge_gate_data.py` — `merge_gate_data` 單元測試。
 - `technical_manual.md` / `technical_manual_xml.md` — 技術手冊。
+- `docs/model_roadmap.md` — **模型改進 roadmap 完整版**（六項的理由/否決方案/限制、系統定位、volatility 對策）。摘要見第 4 節。
 - `docs/` — 降雨事件定義比較、work summary、figures（注意：`docs/superpowers/` 已 gitignore）。
 
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-02T15:33:47+08:00 — drycut 參數定案(L=3h/buf=60)、產正式 meta、更正可用段門檻、系統定位定案
+- **Trigger:** 使用者長期休息後回歸，要求完整複盤；複盤中定案 buffer/L 與系統定位。
+- **What changed:**
+  - **定案 `L=3h, buffer=60min`**，跑出正式 meta `dataset/rain_segments_meta_drycut_L3h_buf60.csv`（覆蓋 7/2 的同名樣式預覽檔）。
+  - **定案系統定位＝即時預警系統**（虛擬水位量測為更長遠目標）→ 確認 roadmap #1 delta-target 可行（推論時有 HL01 當下值當錨）。
+  - 新增 `docs/model_roadmap.md`：六項改進的完整版（理由／否決方案／限制／volatility 對策）。
+  - **更正**：舊紀錄用「75min 可用門檻」判斷段夠不夠長是錯的；正確門檻是 `seq_len + pred_len`（seq_len=96→111min，`run.py` 預設 seq_len=60→75min，75 這個數字只是預設值下的巧合）。
+- **Why:** 兩個月空窗後需重建脈絡；重算數據後發現 buffer=0 不可用（60% 段生不出 window），且門檻公式記錯會高估可用段數。
+- **Files touched:** `dataset/rain_segments_meta_drycut_L3h_buf60.csv`(重產)、`docs/model_roadmap.md`(新增)、`PROGRESS.md`。**未動任何模型/訓練碼。**
+- **Commands run:** `python build_drycut_segments_meta.py --l-hours 3 --buffer-minutes 60`；另以 scratchpad 腳本重算 L×buffer 網格與 seq_len 敏感度、驗證 window 重疊。
+- **Result/verification:**
+  - 正式 meta：**179 段 / 54,590 分鐘 / 10.7%**；duration min=130m、中位 200m、max 2040m；**無任何段 <2h**。
+  - **重疊驗證：0 對重疊，最小相鄰間隔 61 分鐘**，與 `L-2B = 180-120 = 60` 的理論下界吻合 → `L>=2B` 約束確實成立。
+  - L×buffer 網格（可生 window 的段數 / 訓練 windows，seq_len=96）：buf=0 → 72/179 段、21,600 win；buf=30 → 98/179、26,960；**buf=60 → 179/179、34,900**；buf=90 → 179/179、45,640。舊法對照 159 段、32,999 win。
+  - → **buffer=60 使 100% 段可用，「57 段 10 分鐘碎段」問題自動消失，不需額外丟棄規則**；且訓練量已超過舊法。
+  - seq_len 敏感度（L=3h/buf=60）：seq_len 30/60/96 皆 179/179 可用（46,714 / 41,344 / 34,900 win）；seq_len=120 起降為 122 段，180 → 94 段。
+- **Follow-ups:**
+  - **pipeline 斷點**：目前**沒有**腳本把 meta + `all_minute_wide.csv` 組成訓練 CSV，需新寫（見 Snapshot next steps 1）。
+  - buffer=60 使 5/20「後置 60min 可能混合上升/衰退/平靜動態」的疑慮重新浮現，待 delta-target 後以 per-segment 指標檢查。
+  - 7/25 的兩張 drawio（水位因子圖、pipeline 架構圖）用途未明，待使用者說明後補記。
+
+### 2026-07-02T17:00:00+08:00 — duration bin 改細 + buffer 改 Win 慣例並以粉紅色呈現
+- **Trigger:** 使用者要求（bin 改 10m/20m/30m/30-60m/…；buffer 用粉紅色）。
+- **What changed:** `build_drycut_segments_meta.py`：bin 改右閉 `[0,10,20,30,60,120,240,480,960,1920,inf]`；meta schema 改回現行慣例 **SegmentStart/End=含雨核心、WinStart/WinEnd=核心±buffer（資料首尾截斷）**，DurationMinutes 以 Win 計，加 `L>=2*buffer` 防重疊檢查。`visualize_drycut_segments.py`：核心綠、buffer 粉紅（hotpink）、灰=剔除乾段；bin 常數改由 build 腳本 import；gap 改以 Win 邊界計。
+- **Commands run:** build+viz buf=0 全量重產；buf=60 產預覽（`dataset/rain_segments_meta_drycut_L3h_buf60.csv` + `analysis/drycut_segments/.../seg_003,046`）。
+- **Result/verification:** buf=0 數字不變（179 段/33,110 分鐘）；新 bin 顯示 57 段恰為 10m（孤立單筆雨測）。buf=60 預覽驗證：seg_046 dur 1920→2040m、gap 6.2/21.4→4.2/19.4h（兩側各吃 1h，正確）；seg_003 10m 核心→130m（跨過 75min 可用門檻，展示 buffer 拯救小碎段）。
+- **Follow-ups:** buf=60 只是樣式預覽，正式 buffer 值仍待使用者定案。
+
+### 2026-07-02T16:40:24+08:00 — 依使用者回饋改名 drycut、移除 split、補 duration 統計、圖全英文
+- **Trigger:** 使用者七點回饋（命名誤導、split 先不用、要 duration 分布、圖不用中文、context 顯示窗說明）。
+- **What changed:** `build_dry_segments_meta.py`/`visualize_dry_segments.py` 改名為 `build_drycut_segments_meta.py`/`visualize_drycut_segments.py`（保留的 segment 都含雨、非 dry，輸出改叫 `rain_segments_meta_drycut_*`）；meta 移除 split 欄（split 方式後續另定）；build 腳本加 duration 分 bin 計數＋統計量輸出；viz 全英文、新增 `duration_hist.png`、每段標題加上相鄰被剔除乾段的真實長度（gap before/after，資料邊界顯示 edge）；舊名檔案與輸出已刪除。
+- **Files touched:** `build_drycut_segments_meta.py`、`visualize_drycut_segments.py`（新增）；`build_dry_segments_meta.py`、`visualize_dry_segments.py`、`dataset/dry_segments_meta_L3h_buf0.csv`、`analysis/dry_segments/`（刪除）。
+- **Commands run:** `python build_drycut_segments_meta.py --l-hours 3 --buffer-minutes 0`、`python visualize_drycut_segments.py`。
+- **Result/verification:** 179 段/33,110 分鐘不變；duration 分布：<15m 57 段（多為 10min 孤立陣雨）、中位 80m、max 1920m（32h）；>=4h 的 40 段就佔保留分鐘的 73%。圖抽查 OK（seg_046 標註 gap before=6.2h after=21.4h）。
+- **Follow-ups:** 澄清：圖上灰色前後 ±3h 只是顯示窗（`--context-hours`），與 L/buffer 無關；實際相鄰乾段 ≥L 且通常更長，真實長度見標題。
+
+### 2026-07-02T16:35:00+08:00 — 產出 L=3h buf=0 乾段切分 meta + 檢視圖
+- **Trigger:** 使用者定案「L 先用 3、buffer=0，先看資料長相；buffer 基本確定要加但之後再定」。
+- **What changed:** 新增 `build_dry_segments_meta.py`（L/buffer 參數化，重用 `Data_From_SQL_all.assign_split_to_segments` 的 70/10/rest split；NaN 不算確定乾；buffer 邊緣純乾碎片自動丟棄）與 `visualize_dry_segments.py`（全年 overview + 每段兩層圖：上 HL01 下 Past10Min，segment 綠底、前後 ±3h 被剔除脈絡灰底；CJK 字型 fallback）。
+- **Files touched:** `build_dry_segments_meta.py`、`visualize_dry_segments.py`（皆新增）。
+- **Commands run:** `python build_dry_segments_meta.py --l-hours 3 --buffer-minutes 0`、`python visualize_dry_segments.py --meta dataset/dry_segments_meta_L3h_buf0.csv`。
+- **Result/verification:** `dataset/dry_segments_meta_L3h_buf0.csv`：179 段、33,110 分鐘（6.5%）、split train125/val17/test37，與 `analyze_dry_runs.py` 統計完全吻合。圖輸出 `analysis/dry_segments/dry_segments_meta_L3h_buf0/`（gitignored）。抽查：seg_046（最長 32h，雨間乾檔正確保留、但 segment 結束時退水被切掉→支持 buffer）、seg_003（孤立 10min 陣雨→超短碎段，共 85 段 <75min）、overview 顯示 test 又集中 7-8 月颱風季。
+- **Follow-ups:** 使用者看圖 → 定 buffer/L/小段處理 → 重產正式 meta → 接 `data_provider/`。
+
+### 2026-07-02T16:06:12+08:00 — 乾段反向切分法：可行性統計（analyze_dry_runs.py，未改 pipeline）
+- **Trigger:** 使用者提出新切分想法（7/2 會議「從沒下雨的部分出發」）；經 AskUserQuestion 選「先看統計再定邊界」。
+- **What changed:** 新增 `analyze_dry_runs.py`（read-only 統計腳本）：以 Past10Min==0 連續 ≥L 小時偵測長乾段，對 L=3/4/5/6h 算剔除/保留量、殘餘 segment 分佈、與現行 Past1Hr 版 rain windows 的重疊。另以 inline script 補算 ±60min buffer 版本。
+- **Why:** 新法反向定義資料（剔除確定乾，其餘全留）：避開 Past1Hr 1 小時尾巴灌水、保留兩場雨之間 <L 的停雨段（退水動態）。先量化再定 L 與邊界規則。
+- **Files touched:** `analyze_dry_runs.py`（新增）。
+- **Commands run:** `python analyze_dry_runs.py`、inline buffer 計算。
+- **Result/verification（資料 2024-08-13~2025-08-03，511,679 分鐘，97% 乾）:**
+  - 雨分鐘保留率各 L 皆 100%（sanity check 通過）。
+  - 不留 buffer：L=4h → 161 seg、36,780 分鐘（7.2%），但 p25≈12min，可用（≥75min）僅 91 seg。
+  - 留 ±60min buffer：L=4h → 163 seg、56,220 分鐘（11.0%），161 seg 可用，中位長 3.5h。
+  - 對照現行（48,847 分鐘、159 seg）：現行視窗內有 13k–18k 分鐘落在長乾段內（Past1Hr 尾巴+buffer），新法（無 buffer 版）會剔除；另新增 2k–8.5k 分鐘視窗外資料（雨間停雨段）。
+- **Follow-ups:** 使用者定 L 與 buffer 規則 → 改 pipeline 產新 segments meta。注意：缺測不可視為「確定乾」（本份資料無 NaN，但 pipeline 化時要處理）。
+
+### 2026-06-30T16:00:40+08:00 — anchored 診斷 + 模型改進 roadmap（討論，未改碼）
+- **Trigger:** 使用者要求記錄 roadmap + 研究方向確立（scope change）。
+- **What changed:** 完成 level-bias 診斷與一系列分析/視覺化工具；與使用者討論並定下模型改進方向。**未改動訓練碼**。
+- **Why:** 找出 raw MSE 遠輸 persistence 的原因（per-window level bias），並規劃治本路線。
+- **Files touched（皆新增分析/視覺化，未動模型/訓練）:** `compute_anchored_mse.py`（含逐 horizon Corr）、`visualize_anchored.py`、`visualize_segment.py`（含 rain on/off）、`slide_anchored_figure.py`、`analyze_rain_outside_segments.py`、`list_rain_outside_segments.py`、`docs/superpowers/specs/2026-06-03-segment-visualization-design.md`；`exp/exp_Main2.py` 僅 +1 行存 `persist.npy`。
+- **Result/verification:** raw MSE 20884 / anchored 1537 / persistence 2430，Corr 0.819→0.988；persistence 交叉驗證 diff<0.01%。乾段:adj 砍 ~96% 誤差但仍輸 persistence（模型在乾段亂動）。根因:HL01 不在 input。
+- **Follow-ups:** 見第 4 節 roadmap；下一步 delta-target。
+- **Memory:** auto-memory 新增 `anchored-mse-finding`、`model-improvement-roadmap`。
+
+### 2026-06-30T14:20:02+08:00 — commit & push PROGRESS.md
+- **Trigger:** 使用者要求（先 commit PROGRESS.md）+ 隨後使用者 push。
+- **What changed:** commit `PROGRESS.md` 第一版（`59f1a5a`）並 push 到 origin；本筆同時更新 Snapshot 與 origin 同步點。
+- **Why:** 把進度追蹤檔納入版控、保持 Snapshot 與遠端一致。
+- **Files touched:** `PROGRESS.md`。
+- **Commands run:** `git add PROGRESS.md`、`git commit`、（使用者）`git push origin main`、`git fetch`、`git rev-list --left-right --count`。
+- **Result/verification:** `origin/main == main == 59f1a5a`，0 ahead / 0 behind。
+- **Follow-ups:** 決定是否追蹤 `CLAUDE.md`（目前未追蹤）。
 
 ### 2026-06-30T14:06:38+08:00 — Stage 3: 初始化 PROGRESS.md
 - **Trigger:** 使用者要求（階段三）。
@@ -100,7 +186,18 @@
 
 - [ ] 詢問並（視意願）commit & push `CLAUDE.md` + `PROGRESS.md`。
 - [ ] （可選）為 `Source_Code/` 補來源/授權 NOTICE（LTSF-Linear, Apache-2.0）。
-- [ ] meeting_recap.txt 第 72 行待辦（資料切分）：每個 segment 隨機 split，但同一 segment 的 windows 不可散落在不同 split。
+- [x] drycut 切分參數定案 `L=3h, buffer=60min`；正式 meta 已產（2026-09-02）。
+- [x] 系統定位定案＝即時預警（虛擬量測為長遠目標），delta-target 可行（2026-09-02）。
+- [ ] **寫「meta → 訓練 CSV」組裝腳本**（pipeline 目前的斷點）。
+- [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
+- [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**
+  - [ ] **delta-target**（下一步）：target=`HL01_future − x_last`，推論加回；架構不動，與 DLinear 合併。
+  - [ ] exog ablation：拿掉 exog 看 corr/MSE 變化，確認 exog 路徑是否有效。
+  - [ ] exog/GRU horizon-aware：現況單一 [B,16] context broadcast 給全 15 horizon，無法表達雨延遲；改逐 horizon（cross-attention：GRU 逐步輸出 + 每 horizon 可學 query）。
+  - [ ] branch-NLinear（偏離變體）：branch 減自己最後值、不加回 → 全偏離空間，配 delta-target。
+  - [ ] 加乾段(dry windows)訓練：現只用降雨事件視窗 → 乾段 OOD 亂動；加平衡子集教「無驅動→不動」。
+  - [ ] （可選）rain 與 gate 分開 encode。
+- [ ] 資料切分（meeting_recap L72）：每 segment 隨機 split、整段不拆。**暫緩**——若 delta/正規化消掉 level 軸分布差異則可不做；要做須在 **127 個 union 合併單位**上分（±60min 緩衝致 32 對 segment 重疊、1642 共用 row → 防 leakage），test 為永久 hold-out 須挑代表性 seed。
 - [ ] requirements.txt 與本機 venv 版本確認一致（venv 為 Python 3.14.3）。
 
 ---
