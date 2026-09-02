@@ -7,14 +7,13 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-02T15:33:47+08:00
-- **Current goal:** drycut 切分參數已定案（**L=3h, buffer=60min**），正式 meta 已產出。下一步是補上「meta → 訓練 CSV」的組裝腳本（目前缺這一支），接回 `data_provider/`，然後開始 roadmap #1 delta-target。
-- **Status (one line):** `dataset/rain_segments_meta_drycut_L3h_buf60.csv` 已產出並驗證（179 段 / 54,590 分鐘 / 10.7% / **0 重疊**、最小相鄰間隔 61min），**179 段全部可生訓練 window**（seq_len≤96 時）；但**尚無腳本把 meta + all_minute_wide 組成訓練 CSV**，pipeline 在此斷開。
+- **Last updated:** 2026-09-02T16:05:00+08:00
+- **Current goal:** drycut 切分已全線打通（參數定案 → meta → 訓練 CSV）。下一步是用新 CSV 重訓一版 baseline，然後開始 roadmap #1 delta-target。
+- **Status (one line):** `dataset/train_drycut_L3h_buf60.csv` 已產出（54,590 列 / 179 段 / 34,900 windows / 29 欄，欄位順序與舊 `water_level_rain_gate_all.csv` 完全一致），**pipeline 斷點已補上，可直接餵 `run.py`**；尚未跑訓練。
 - **Next steps:**
-  1. **寫組裝腳本**（目前缺）：`meta + dataset/all_minute_wide.csv`(23 欄) → 訓練 CSV(29 欄，比照 `water_level_rain_gate_all.csv`)。要補的 6 欄：`SegmentStart`/`SegmentEnd`/`segment_id`/`WinStart`/`WinEnd`（從 meta 貼）、`isRain`（從 `Past10Min` 依新定義導出）。
-  2. （建議）跑 `python visualize_drycut_segments.py --meta dataset/rain_segments_meta_drycut_L3h_buf60.csv` 產正式版檢視圖再抽查。
-  3. 用新 CSV 重訓一版當 baseline（`--segment_col segment_id`，loader 自行依 SegmentStart 排序切 70/10/rest）。
-  4. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
+  1. 用新 CSV 跑一版 baseline：`python run.py --model DLinearMix2 --data custom --data_path train_drycut_L3h_buf60.csv --segment_col segment_id ...`（其餘參數見第 5 節），與舊 `water_level_rain_gate_all.csv` 的結果對照。
+  2. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
+  3. （已在跑／可重跑）`python visualize_drycut_segments.py --meta dataset/rain_segments_meta_drycut_L3h_buf60.csv` 產 buf=60 檢視圖抽查。
 - **Open questions / blockers:** 無 blocker。待決：split 方式（目前沿用 loader 內建 70/10/rest；隨機 per-segment 暫緩）；exog 路徑是否有效（待 #2 ablation）；**buffer=60 讓 5/20「後置 60min 混合動態」的疑慮重新浮現**（見 `docs/model_roadmap.md` 第 5 節）。資料來源為本機 `dataset/all_minute_wide.csv`（2026-06-02 產，2024-08-13 16:01~2025-08-03 23:59，511,679 分鐘），**未重抓 SQL**；要延長範圍需回 SQL 環境重跑 `Data_From_SQL_all.py`。
 - **Must-know handoff points:**
   - **系統定位（2026-09-02 定案）**：**即時預警系統**；虛擬水位量測是更長遠目標。此定位決定 delta-target 可行（推論時有 HL01 當下值當錨）；若日後轉向虛擬量測，roadmap #1/#4 需重新設計。
@@ -56,6 +55,7 @@
 - `analyze_*.py` — best-model overview、full inference(+lag)、rain-outside-segments、anchored MSE 等分析。
 - `compute_anchored_mse.py` / `list_rain_outside_segments.py` — anchored MSE 計算與降雨外 segment 分析。
 - `eval_dry.py` + `scripts/draw_eval_dry_diagrams.py` — 乾期評估與圖表。
+- `build_training_csv_from_meta.py` — **meta → 訓練 CSV 組裝器**（pipeline 斷點的補丁）。任何含 segment_id/SegmentStart/SegmentEnd/WinStart/WinEnd 的 meta 皆適用；切法沿用 `Data_From_SQL_4.py:400-436`，並補做 gate 段內 ffill。
 - `analyze_dry_runs.py` / `build_drycut_segments_meta.py` / `visualize_drycut_segments.py` — 乾段反向切分法 drycut（7/2 起）：可行性統計、meta 產生（L/buffer 參數化、無 split）、切分結果檢視圖（英文、附 dry gap 標註）。
 - `visualize.py` / `model_visualize.py` / `visualize_anchored.py` / `visualize_segment.py` / `slide_anchored_figure.py` — 視覺化。
 - `utils/` — `metrics.py`、`tools.py`、`timefeatures.py`。
@@ -69,6 +69,23 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-02T16:05:00+08:00 — 補上 pipeline 斷點：meta → 訓練 CSV 組裝器
+- **Trigger:** 使用者詢問「產完 meta 之後要怎麼訓練」，確認 pipeline 中間缺一支腳本。
+- **What changed:** 新增 `build_training_csv_from_meta.py`，把 segment meta 與 `dataset/all_minute_wide.csv` 組裝成 `run.py` 可直接使用的訓練 CSV。並以定案參數產出 `dataset/train_drycut_L3h_buf60.csv`。
+- **Why:** `build_drycut_segments_meta.py` 只產出 segment 目錄（時間範圍、無數值），`Data_Loader` 要的是帶 `segment_id`/`SegmentStart` 的逐分鐘訓練檔；舊 pipeline 的對應邏輯綁在需要連 SQL 的 `Data_From_SQL_4.py` 裡，無法重用。
+- **Files touched:** `build_training_csv_from_meta.py`(新增)、`dataset/train_drycut_L3h_buf60.csv`(產出, gitignored)、`PROGRESS.md`。**未動模型/訓練碼。**
+- **Commands run:** `python build_training_csv_from_meta.py --meta dataset/rain_segments_meta_drycut_L3h_buf60.csv`
+- **Result/verification:**
+  - 54,590 列 / 179 段（meta 179 段全數成功）/ 段長 min 130m、中位 200m、max 2040m。
+  - **29 欄且欄位順序與舊 `water_level_rain_gate_all.csv` 完全一致**（程式比對確認），loader 讀法不變。
+  - seq_len=96/pred_len=15 → 179/179 段可用、**34,900 windows**，與定案時的預估完全吻合。
+  - `isRain` 核心 33,110 列 / buffer 21,480 列；核心數與 buf=0 版的保留分鐘數 33,110 完全一致 → 交叉驗證通過。
+  - gate NaN 經段內 ffill 由 **73% 降至 4.4%**（殘餘為段首 ffill 無法填補者）；HL 欄殘餘 NaN 僅 13 列。
+- **重要語意釐清（易誤解）:**
+  - **`isRain` 不是降雨旗標**。其定義（`Data_From_SQL_4.label_rain_minutes`）是 `date ∈ [SegmentStart, SegmentEnd]`，實為「在核心(1) / 在 buffer(0)」的標記。**buffer=0 時該欄恆為 1、完全失去資訊量** —— 這是 buf=0 不可用的另一個理由。
+  - all_minute_wide 的 gate 欄約 73% 是 NaN，因為 `Data_From_SQL_all.py` 刻意把 within-segment ffill 延後給下游（該檔當時無 segment 可分組）。任何從寬表切段的程式都必須自行補做，否則絕大多數 window 會因 NaN 被丟棄。
+- **Follow-ups:** 跑 baseline 訓練並與舊資料集對照；之後進 roadmap #1。
 
 ### 2026-09-02T15:33:47+08:00 — drycut 參數定案(L=3h/buf=60)、產正式 meta、更正可用段門檻、系統定位定案
 - **Trigger:** 使用者長期休息後回歸，要求完整複盤；複盤中定案 buffer/L 與系統定位。
@@ -188,7 +205,8 @@
 - [ ] （可選）為 `Source_Code/` 補來源/授權 NOTICE（LTSF-Linear, Apache-2.0）。
 - [x] drycut 切分參數定案 `L=3h, buffer=60min`；正式 meta 已產（2026-09-02）。
 - [x] 系統定位定案＝即時預警（虛擬量測為長遠目標），delta-target 可行（2026-09-02）。
-- [ ] **寫「meta → 訓練 CSV」組裝腳本**（pipeline 目前的斷點）。
+- [x] 寫「meta → 訓練 CSV」組裝腳本（2026-09-02，`build_training_csv_from_meta.py`）。
+- [ ] 用 `dataset/train_drycut_L3h_buf60.csv` 重訓 baseline，與舊資料集結果對照。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
 - [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**
   - [ ] **delta-target**（下一步）：target=`HL01_future − x_last`，推論加回；架構不動，與 DLinear 合併。
