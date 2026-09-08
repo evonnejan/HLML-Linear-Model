@@ -15,9 +15,9 @@ meta 無關規則：任何含
 - `isRain` 沿用舊定義 = date 落在 [SegmentStart, SegmentEnd] 內，
   亦即「在核心內(1) / 在 buffer 內(0)」的標記，**不是**降雨量判定。
   buffer=0 時全為 1（該欄失去資訊量）。
-- gate 欄在 all_minute_wide 中約 73% 為 NaN：`Data_From_SQL_all.py` 刻意
+- gate 欄在 all_minute_wide 中仍有約 7% NaN：`Data_From_SQL_all.py` 刻意
   延後 within-segment ffill（因為當時尚無 segment）。本腳本在切段後補做，
-  對齊 `merge_gate_data.py:83-86`，否則絕大多數 window 會因 NaN 被丟棄。
+  對齊 `merge_gate_data.py:83-86`，補完後降到約 3.5%（殘餘皆在段首）。
 
 用法:
     python build_training_csv_from_meta.py \
@@ -107,15 +107,27 @@ def fill_gate_within_segment(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def check_no_overlap(meta: pd.DataFrame) -> None:
+def check_no_overlap(meta: pd.DataFrame, allow_overlap: bool = False) -> None:
+    """檢查相鄰 window 是否重疊。
+
+    重疊代表同一批分鐘同時屬於兩個 segment，若這兩段被分到不同 split 即為
+    train/test leakage。drycut 以 `L >= 2*buffer` 從結構上排除；舊法
+    (rain_segments_meta.csv) 沒有這個保證，實測有 32 對重疊 —— 要重現舊法
+    當對照組時需以 allow_overlap=True 明示接受此缺陷。
+    """
     m = meta.sort_values("WinStart").reset_index(drop=True)
     gap = (m["WinStart"].shift(-1) - m["WinEnd"]).dt.total_seconds().div(60)[:-1]
     n_bad = int((gap <= 0).sum())
     if n_bad:
-        raise ValueError(
-            f"meta 有 {n_bad} 對 window 重疊，會造成 train/test leakage。"
-            " 請確認產 meta 時滿足 L >= 2*buffer。"
-        )
+        msg = (f"meta 有 {n_bad} 對 window 重疊，會造成 train/test leakage。"
+               " 請確認產 meta 時滿足 L >= 2*buffer。")
+        if not allow_overlap:
+            raise ValueError(msg)
+        shared = int(-gap[gap <= 0].sum())
+        print(f"  [WARN] {msg}\n"
+               f"         已用 --allow-overlap 明示接受（重疊共約 {shared:,} 分鐘）。"
+               f" 此為舊法的已知缺陷，僅適用於重現舊法作為對照組。")
+        return
     if len(gap):
         print(f"  重疊檢查 OK：0 對重疊，最小相鄰間隔 {gap.min():.0f} 分鐘")
 
@@ -170,6 +182,7 @@ def build_training_csv(
     rain_col: str = RAIN_COL,
     add_msr: bool = True,
     skip_if_current: bool = False,
+    allow_overlap: bool = False,
 ) -> str:
     """組裝訓練 CSV；回傳輸出路徑。可被其他腳本直接呼叫。
 
@@ -183,7 +196,8 @@ def build_training_csv(
 
     out = out or default_out_path(meta_path)
     stamp = Path(out).with_suffix(".source.sha256")
-    fp = _fingerprint(meta_path, all_csv, {"rain_col": rain_col, "add_msr": add_msr})
+    fp = _fingerprint(meta_path, all_csv,
+                      {"rain_col": rain_col, "add_msr": add_msr, "allow_overlap": allow_overlap})
 
     if skip_if_current and Path(out).exists() and stamp.exists() and stamp.read_text().strip() == fp:
         print(f"[skip] {out} 已是最新（來源指紋未變），不重複產生。")
@@ -191,7 +205,7 @@ def build_training_csv(
 
     print(f"meta   : {meta_path}（{len(meta)} 段）")
     print(f"寬表   : {all_csv}")
-    check_no_overlap(meta)
+    check_no_overlap(meta, allow_overlap=allow_overlap)
 
     wide = pd.read_csv(all_csv, parse_dates=["date"]).sort_values("date").reset_index(drop=True)
     print(f"  寬表 {len(wide):,} 列 x {len(wide.columns)} 欄，"
@@ -229,6 +243,8 @@ def main() -> None:
     parser.add_argument("--rain-col", default=RAIN_COL, help=f"計算 {MIN_SINCE_RAIN_COL} 用的雨量欄")
     parser.add_argument("--no-min-since-rain", action="store_true",
                         help=f"不產生 {MIN_SINCE_RAIN_COL} 欄")
+    parser.add_argument("--allow-overlap", action="store_true",
+                        help="允許 meta 有重疊 window（僅用於重現舊法作為對照組）")
     parser.add_argument("--skip-if-current", action="store_true",
                         help="既有輸出的來源指紋未變時跳過重算")
     args = parser.parse_args()
@@ -242,6 +258,7 @@ def main() -> None:
         rain_col=args.rain_col,
         add_msr=not args.no_min_since_rain,
         skip_if_current=args.skip_if_current,
+        allow_overlap=args.allow_overlap,
     )
 
 

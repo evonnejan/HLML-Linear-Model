@@ -93,10 +93,11 @@ def merge_all_sources(
     staleness_limit: pd.Timedelta = GATE_STALENESS_LIMIT,
 ) -> pd.DataFrame:
     """Anchor on water_wide. Left-join rain (both already 1-min ffill).
-    Gate uses the SAME row-wise approach as merge_gate_data.py:62-78 to
-    keep preprocessing consistent with the training data:
+    Gate alignment (fixed 2026-09-02: was row-wise, which discarded per-column
+    history because ~39% of raw gate rows are partial reports):
 
-      1. single row-wise merge_asof(direction='backward')
+      1. per-column merge_asof(direction="backward"), each column using only
+         its own non-NaN observations
       2. backward_lag > staleness_limit → set all 7 gate cols to NaN
       3. clip negatives to 0
 
@@ -124,19 +125,27 @@ def merge_all_sources(
 
     gate_cols = [GATE_RENAME_MAP[col] for col in GATE_TARGET_COLUMNS]
 
-    merged = pd.merge_asof(
-        merged.sort_values("date"),
-        gate,
-        on="date",
-        direction="backward",
-    )
-
-    backward_lag = merged["date"] - merged["_gate_obs_time"]
-    stale_mask = (backward_lag > staleness_limit) | merged["_gate_obs_time"].isna()
-    merged.loc[stale_mask, gate_cols] = float("nan")
-
-    merged[gate_cols] = merged[gate_cols].clip(lower=0)
-    merged = merged.drop(columns=["_gate_obs_time"])
+    # 逐欄 merge_asof：每個閘門欄位只用「自己有值」的觀測回填，各自套 staleness。
+    #
+    # 不可用整列 merge_asof（舊版做法）：原始閘門寬表有約 39% 的列是部分回報
+    # （7 欄只有其中幾欄有值），整列比對一旦抓到這種列，其餘欄位就變成 NaN，
+    # 即使更早的列有那些欄位的值。實測整列做法會讓任一欄 NaN 達 ~80%，
+    # 逐欄做法降到 ~7%，且兩者皆有值處數值 100% 相同。
+    merged = merged.sort_values("date").reset_index(drop=True)
+    for col in gate_cols:
+        src = gate.loc[gate[col].notna(), ["date", col, "_gate_obs_time"]]
+        matched = pd.merge_asof(
+            merged[["date"]],
+            src,
+            on="date",
+            direction="backward",
+        )
+        stale_mask = (
+            (matched["date"] - matched["_gate_obs_time"]) > staleness_limit
+        ) | matched["_gate_obs_time"].isna()
+        values = matched[col].astype("float64")
+        values[stale_mask] = float("nan")
+        merged[col] = values.clip(lower=0).to_numpy()
 
     drop_present = [col for col in DROP_COLS if col in merged.columns]
     if drop_present:

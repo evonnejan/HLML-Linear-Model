@@ -183,7 +183,7 @@ def main() -> None:
     ap.add_argument("--pred-len", type=int, default=15)
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--ratios", default="0.70,0.15,0.15", help="train,val,test 目標比例")
-    ap.add_argument("--n-folds", type=int, default=4, help="rolling-origin fold 數（0 = 不產）")
+    ap.add_argument("--n-folds", type=int, default=3, help="rolling-origin fold 數（0 = 不產）")
     ap.add_argument("--init-train-frac", type=float, default=0.5,
                     help="dev 中作為第一個 fold 起始 train 的 window 佔比")
     ap.add_argument("--out", default=None)
