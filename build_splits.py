@@ -77,20 +77,75 @@ def count_windows_per_segment(
     return pd.DataFrame(rows).sort_values("SegmentStart").reset_index(drop=True)
 
 
-def pick_boundary(cum: np.ndarray, total: int, target_frac: float, lo: int, hi: int) -> int:
+def find_overlap_groups(win: pd.DataFrame, seg_col: str) -> list[list]:
+    """找出 window 互相重疊的 segment 群組（連通分量）。
+
+    重疊代表同一批分鐘同時屬於兩個 segment；若它們被分到不同 split 就是 leakage。
+    drycut 以 `L >= 2*buffer` 從結構上排除重疊；舊法（rain_segments_meta.csv）的
+    gap=30min 合併門檻與 ±60min 視窗互相矛盾，實測有 32 對重疊。
+    同一群組的段必須留在同一個 partition。
+    """
+    if not {"WinStart", "WinEnd"}.issubset(win.columns):
+        return []
+    w = win.sort_values("WinStart").reset_index(drop=True)
+    ids = w[seg_col].tolist()
+    starts = w["WinStart"].tolist()
+    ends = w["WinEnd"].tolist()
+
+    groups: list[list] = []
+    cur = [ids[0]]
+    running_end = ends[0]
+    for i in range(1, len(ids)):
+        if starts[i] <= running_end:          # 與目前這串重疊 → 併入
+            cur.append(ids[i])
+            running_end = max(running_end, ends[i])
+        else:
+            groups.append(cur)
+            cur = [ids[i]]
+            running_end = ends[i]
+    groups.append(cur)
+    return [g for g in groups if len(g) > 1]
+
+
+def blocked_boundaries(meta: pd.DataFrame, groups: list[list], seg_col: str) -> np.ndarray:
+    """標記哪些邊界位置會把同一個重疊群組切開，不可作為 split 邊界。
+
+    邊界 index i 的語意是「前 i 段歸前一個 partition」，因此 i 落在群組內部
+    （即 meta 第 i-1 段與第 i 段同屬一群）就會拆散該群組。
+    """
+    n = len(meta)
+    blocked = np.zeros(n + 1, dtype=bool)
+    if not groups:
+        return blocked
+    pos = {sid: i for i, sid in enumerate(meta[seg_col])}
+    for g in groups:
+        idxs = sorted(pos[sid] for sid in g if sid in pos)
+        for i in idxs[1:]:
+            blocked[i] = True                  # 切在這裡會把群組拆開
+    return blocked
+
+
+def pick_boundary(cum: np.ndarray, total: int, target_frac: float, lo: int, hi: int,
+                  blocked: np.ndarray | None = None) -> int:
     """在 [lo, hi] 內挑一個 segment 邊界，使累積 window 佔比最接近 target_frac。
 
     回傳的 index 意義是「前 idx 個 segment 歸前一個 partition」。
+    blocked 標記的位置會拆散重疊群組，予以排除；若全被排除則退回不設限。
     """
     if hi <= lo:
         return lo
-    target = total * target_frac
     cand = np.arange(lo, hi + 1)
+    if blocked is not None:
+        allowed = cand[~blocked[cand]]
+        if len(allowed):
+            cand = allowed
+    target = total * target_frac
     err = np.abs(cum[cand] - target)
     return int(cand[int(np.argmin(err))])
 
 
-def assign_split(meta: pd.DataFrame, ratios: tuple[float, float, float]) -> pd.DataFrame:
+def assign_split(meta: pd.DataFrame, ratios: tuple[float, float, float],
+                 blocked: np.ndarray | None = None) -> pd.DataFrame:
     """依累積 window 數找 train/val/test 邊界，保持 segment 完整。"""
     w = meta["n_windows"].to_numpy()
     cum = np.concatenate([[0], np.cumsum(w)])  # cum[i] = 前 i 段的 window 總數
@@ -101,8 +156,8 @@ def assign_split(meta: pd.DataFrame, ratios: tuple[float, float, float]) -> pd.D
 
     r_train, r_val, _ = ratios
     # 每個 partition 至少留 1 段
-    b1 = pick_boundary(cum, total, r_train, 1, n - 2)
-    b2 = pick_boundary(cum, total, r_train + r_val, b1 + 1, n - 1)
+    b1 = pick_boundary(cum, total, r_train, 1, n - 2, blocked)
+    b2 = pick_boundary(cum, total, r_train + r_val, b1 + 1, n - 1, blocked)
 
     split = np.array(["test"] * n, dtype=object)
     split[:b1] = "train"
@@ -112,7 +167,8 @@ def assign_split(meta: pd.DataFrame, ratios: tuple[float, float, float]) -> pd.D
     return meta
 
 
-def assign_folds(meta: pd.DataFrame, n_folds: int, init_frac: float) -> pd.DataFrame:
+def assign_folds(meta: pd.DataFrame, n_folds: int, init_frac: float,
+                 blocked: np.ndarray | None = None) -> pd.DataFrame:
     """dev(=train+val) 內做 rolling-origin expanding-window：塊 0 起始 train，塊 1..k 各為一個 val。"""
     meta = meta.copy()
     for i in range(1, n_folds + 1):
@@ -131,12 +187,14 @@ def assign_folds(meta: pd.DataFrame, n_folds: int, init_frac: float) -> pd.DataF
     total = int(cum[-1])
 
     # 依累積 window 找 (n_folds+1) 塊的邊界
-    bounds = [pick_boundary(cum, total, init_frac, 1, len(idx) - n_folds)]
+    # dev 為 meta 的時間前綴，故可直接取 blocked 的前 len(idx)+1 個位置
+    dev_blocked = blocked[: len(idx) + 1] if blocked is not None else None
+    bounds = [pick_boundary(cum, total, init_frac, 1, len(idx) - n_folds, dev_blocked)]
     for i in range(1, n_folds):
         frac = init_frac + (1 - init_frac) * i / n_folds
         lo = bounds[-1] + 1
         hi = len(idx) - (n_folds - i)
-        bounds.append(pick_boundary(cum, total, frac, lo, hi))
+        bounds.append(pick_boundary(cum, total, frac, lo, hi, dev_blocked))
     bounds.append(len(idx))  # 最後一塊吃到 dev 結尾
 
     for f in range(1, n_folds + 1):
@@ -215,8 +273,25 @@ def main() -> None:
     if dead:
         print(f"  [WARN] {dead} 段的可用 window 為 0（過短或整段含 NaN），仍會被分派 split 但不產生樣本。")
 
-    meta = assign_split(meta, ratios)
-    meta = assign_folds(meta, args.n_folds, args.init_train_frac)
+    # 重疊防護：window 互相重疊的 segment 必須留在同一 partition，否則共用的分鐘
+    # 會同時出現在兩個 split（leakage）。drycut 因 L>=2*buffer 不會有重疊。
+    blocked = None
+    if {"WinStart", "WinEnd"}.issubset(df.columns):
+        win = (df[[args.segment_col, "WinStart", "WinEnd"]]
+               .drop_duplicates(subset=[args.segment_col]).copy())
+        win["WinStart"] = pd.to_datetime(win["WinStart"])
+        win["WinEnd"] = pd.to_datetime(win["WinEnd"])
+        groups = find_overlap_groups(win, args.segment_col)
+        if groups:
+            n_seg = sum(len(g) for g in groups)
+            print(f"  [重疊防護] 偵測到 {len(groups)} 個重疊群組（共 {n_seg} 段），"
+                  f"將強制留在同一 partition 以避免 leakage。")
+            blocked = blocked_boundaries(meta, groups, args.segment_col)
+        else:
+            print("  [重疊防護] 無重疊 segment。")
+
+    meta = assign_split(meta, ratios, blocked)
+    meta = assign_folds(meta, args.n_folds, args.init_train_frac, blocked)
 
     out = args.out or f"dataset/splits_{Path(args.data_path).stem}.csv"
     Path(out).parent.mkdir(parents=True, exist_ok=True)

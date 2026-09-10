@@ -7,9 +7,9 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-02T18:20:00+08:00
+- **Last updated:** 2026-09-10T15:40:00+08:00
 - **Current goal:** 閘門前處理缺陷已修、兩個資料集（drycut / 舊法對照組）與 3-fold split 皆已備妥。下一步是跑實驗矩陣（36 runs），之後才進 roadmap #1 delta-target。
-- **Status (one line):** 修正 `Data_From_SQL_all.py` 的整列 merge_asof 缺陷（閘門任一欄 NaN 79.8%→7.1%，兩邊皆有值處數值 100% 相同）；`dataset/train_drycut_L3h_buf60.csv`（179 段/33,381 win）與 `dataset/train_old.csv`（159 段/31,440 win）皆已產出，各配一份 3-fold split 檔。**尚未開始跑實驗矩陣。**
+- **Status (one line):** 資料前處理全部就緒：`train_drycut_L3h_buf60.csv`（179 段/33,381 win）與 `train_old.csv`（159 段/31,440 win）走同一條前處理路徑，各配 3-fold split，且 `build_splits.py` 新增重疊防護後**兩者的 split 與所有 fold 皆 0 leakage**。**尚未開始跑實驗矩陣。**
 - **Next steps:**
   1. **實驗矩陣 36 runs**：資料集(2: drycut/舊法) × exog(3: isRain / 無 / min_since_rain) × loss(2: mse/huber) × fold(3) × seed(1)，約 4.2 小時。需新寫 (i) 因子驅動腳本 (ii) 把 anchored 指標併進同一張總表的彙整器。
   2. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
@@ -35,6 +35,7 @@
 | 2026-06-30 | `docs/superpowers/`、`meeting_recap.txt`、`sh.txt` 不上傳 | 本地工具文件/私人草稿 | 上傳（依使用者意願否決） |
 | 2026-06-30 | 新增 `CLAUDE.md` 為常駐指令、自動維護 `PROGRESS.md` | 跨 session 冷啟動接手 | 僅靠 auto-memory（不足以承載專案級進度） |
 | 2026-06-30 | level bias 治法選 **delta-target**（非 NLinear/RevIN/後處理） | NLinear 錨到 input(鄰站)非 HL01；RevIN 需 HL01 歷史統計(違反原則)；後處理非 end-to-end。delta-target 錨對 HL01、只用最後值、架構不動 | NLinear（否決:錨錯通道）／RevIN（否決:需 HL01 歷史）／續用後處理 anchoring（否決:形狀沒被訓練優化） |
+| 2026-09-10 | split 邊界加入**重疊防護**（重疊 segment 強制同 partition） | 舊法 gap=30min 與 ±60min 視窗矛盾造成 32 對重疊，其中 1 對跨 split（11 分鐘 leakage）。防護讓任何 meta 都有保證，且不需改動資料本身 | 不處理（否決：控制組帶已知 leakage）／裁掉重疊分鐘（否決：會動到資料、損失 buffer）／合併成 union 單位（否決：等效但改變 segment 定義，較侵入） |
 | 2026-09-02 | 閘門合併改**逐欄** merge_asof，並就地重建既有寬表 | 原始寬表 39% 的列是部分回報，整列比對會丟掉其他欄位的歷史值；資料已凍結故可在本機重建，不需回 SQL | 維持現狀（否決：白白損失 ~5% 訓練 window 且閘門特徵品質差）／當成實驗因子（否決：使用者指示先修正再實驗）／回 SQL 重抓（否決：不需要，本機資料已完整） |
 | 2026-09-02 | rolling-origin fold 數定為 **3** | k=3 的 val 大小最平均（±4%）且每折含 28–38 個降雨事件；k=4/6 有折僅 15/9 段。有效樣本單位是事件而非 window | k=4（否決：一折僅 15 段）／k=5、k=6（否決：折內事件數過少，估計不穩） |
 | 2026-09-02 | split 邊界依**可用 window 數**決定，且 split 決策抽離到 loader 之外（`--split_file`） | 段長差距 130~2040 分鐘，按段數切會使實際樣本比例嚴重偏離；抽離後換切法不需動訓練碼，且可版本化保存每次實驗用的切分 | 按段數切（否決：比例失真）／改寫 loader 內建邏輯（否決：每換一種切法就要動訓練碼）／隨機 per-segment split（暫緩：違反 forecasting 的時序因果） |
@@ -74,6 +75,24 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-10T15:40:00+08:00 — build_splits 新增重疊防護；補上閘門與 leakage 的量化細節
+- **Trigger:** 使用者追問「segment 重疊該怎麼處理」「再撈 SQL 是否能拿到更完整資料」。
+- **What changed:** `build_splits.py` 新增 `find_overlap_groups()` 與 `blocked_boundaries()`：偵測 window 互相重疊的 segment 連通群組，並在挑 split/fold 邊界時排除會拆散群組的位置，強制同群組留在同一 partition。`pick_boundary`/`assign_split`/`assign_folds` 皆加上 `blocked` 參數。
+- **Why:** 舊法的 `RAIN_GAP_MINUTES=30`（間隔 <30min 才合併）與 `PRE/POST_WINDOW_MINUTES=60`（各延 ±60min）互相矛盾 —— 間隔 40~120 分鐘的兩場雨不會被合併，但延伸後視窗重疊。實測 32 對重疊、共 1,610 分鐘。
+- **Files touched:** `build_splits.py`、`dataset/splits_train_old.csv`(重產)、`dataset/splits_train_drycut_L3h_buf60.csv`(重產，內容不變)。
+- **Commands run:** `python build_splits.py --data-path dataset/train_old.csv`、`--data-path dataset/train_drycut_L3h_buf60.csv`；另以獨立腳本驗證 leakage。
+- **Result/verification:**
+  - drycut：偵測到 **0 個重疊群組**（L>=2*buffer 的結構保證），split 與 fold 數字完全不變。
+  - 舊法：偵測到 **24 個重疊群組（共 56 段）**；套用防護後 train/val/test = 116/24/19 段、22,047/4,554/4,839 win（70.1%/14.5%/15.4%，比防護前更接近目標比例）。
+  - **leakage 驗證：舊法 32 對重疊中，跨 partition 者由 1 對降為 0；fold_1/2/3 亦皆為 0。**
+- **修正先前偏重的說法:** 先前稱「32 對重疊會造成 leakage」過重。實測防護前只有 **1 對**跨 split（seg 141 val ↔ seg 142 test，核心間隔 110 分鐘，共用 **11 分鐘**），其餘 31 對都落在同一 partition 內、本就無害。量級不足以扭曲結論，但防護仍值得做，因為它讓任何 meta 都有保證。
+- **關於「再撈 SQL 能否更完整」的結論（本輪查證）:**
+  - 逐欄合併後的殘餘 NaN 6.77%（34,657 分鐘）中，**85.5% 集中在 16 個 >=1 小時的區塊**，65.8% 只來自 2 段長斷訊：2025-03-27~04-07（11.3 天）與 2024-09-07~09-11（4.6 天）。這是**感測器真的沒有回報**，重撈不會生出資料。
+  - 部分回報**不是時間戳對齊問題**：把時間戳 round 到 1s/10s/1min，7 欄全有的比例皆維持 61.2% 不變 → 裝置本來就在不同時間點回報，本機 CSV 已忠實反映來源。
+  - 大斷訊多落在乾段（已被 drycut 剔除），故訓練資料的 gate NaN 僅 3.48%，遠低於 6.77%。
+  - **結論：重撈 SQL 預期不會改善**，除非資料庫端事後有回補那兩段長斷訊（僅能在有 SQL 環境時查證）。
+- **Follow-ups:** 實驗矩陣 36 runs。
 
 ### 2026-09-02T18:20:00+08:00 — 修正閘門整列 merge_asof 缺陷、產出舊法對照組、fold 定為 3
 - **Trigger:** 使用者追問閘門 ffill 是否有改善空間；並指示「閘門要修正、修完再開始實驗」、fold 用 3。
