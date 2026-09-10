@@ -23,7 +23,7 @@ run_one() {
     --model DLinearMix2 \
     --data custom \
     --data_path water_level_rain_gate_all.csv \
-    --segment_col segment_id \
+    --segment_col segment_id --split_mode builtin \
     --features S --target HL01 \
     --input_col 'HL02,HL03,HL04,HL05,HL06' \
     --exog_col 'isRain,Past10Min,Past1Hr,Now,*gate_opening*' \

@@ -7,7 +7,7 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-10T16:20:00+08:00
+- **Last updated:** 2026-09-10T18:30:00+08:00
 - **Current goal:** 閘門前處理缺陷已修、兩個資料集（drycut / 舊法對照組）與 3-fold split 皆已備妥。下一步是跑實驗矩陣（36 runs），之後才進 roadmap #1 delta-target。
 - **Status (one line):** 資料前處理全部就緒：`train_drycut_L3h_buf60.csv`（179 段/33,381 win）與 `train_old.csv`（159 段/31,440 win）走同一條前處理路徑，各配 3-fold split，且 `build_splits.py` 新增重疊防護後**兩者的 split 與所有 fold 皆 0 leakage**。**尚未開始跑實驗矩陣。**
 - **Next steps:**
@@ -35,6 +35,7 @@
 | 2026-06-30 | `docs/superpowers/`、`meeting_recap.txt`、`sh.txt` 不上傳 | 本地工具文件/私人草稿 | 上傳（依使用者意願否決） |
 | 2026-06-30 | 新增 `CLAUDE.md` 為常駐指令、自動維護 `PROGRESS.md` | 跨 session 冷啟動接手 | 僅靠 auto-memory（不足以承載專案級進度） |
 | 2026-06-30 | level bias 治法選 **delta-target**（非 NLinear/RevIN/後處理） | NLinear 錨到 input(鄰站)非 HL01；RevIN 需 HL01 歷史統計(違反原則)；後處理非 end-to-end。delta-target 錨對 HL01、只用最後值、架構不動 | NLinear（否決:錨錯通道）／RevIN（否決:需 HL01 歷史）／續用後處理 anchoring（否決:形狀沒被訓練優化） |
+| 2026-09-10 | 新增 `--split_mode` 且**無預設值**，設了 `--segment_col` 就必須明講 | 選用參數漏帶會靜默回退到另一種切法，36 runs 的實驗批次會整批不可比且難察覺；改成必填後漏帶直接報錯 | 維持選用+警告（否決：警告會被 log 淹沒）／直接把 file 設為預設（否決：破壞向後相容，且仍是隱性選擇） |
 | 2026-09-10 | split 邊界加入**重疊防護**（重疊 segment 強制同 partition） | 舊法 gap=30min 與 ±60min 視窗矛盾造成 32 對重疊，其中 1 對跨 split（11 分鐘 leakage）。防護讓任何 meta 都有保證，且不需改動資料本身 | 不處理（否決：控制組帶已知 leakage）／裁掉重疊分鐘（否決：會動到資料、損失 buffer）／合併成 union 單位（否決：等效但改變 segment 定義，較侵入） |
 | 2026-09-02 | 閘門合併改**逐欄** merge_asof，並就地重建既有寬表 | 原始寬表 39% 的列是部分回報，整列比對會丟掉其他欄位的歷史值；資料已凍結故可在本機重建，不需回 SQL | 維持現狀（否決：白白損失 ~5% 訓練 window 且閘門特徵品質差）／當成實驗因子（否決：使用者指示先修正再實驗）／回 SQL 重抓（否決：不需要，本機資料已完整） |
 | 2026-09-02 | rolling-origin fold 數定為 **3** | k=3 的 val 大小最平均（±4%）且每折含 28–38 個降雨事件；k=4/6 有折僅 15/9 段。有效樣本單位是事件而非 window | k=4（否決：一折僅 15 段）／k=5、k=6（否決：折內事件數過少，估計不穩） |
@@ -75,6 +76,18 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-10T18:30:00+08:00 — 新增 --split_mode，split 方式改為必須明確指定
+- **Trigger:** 使用者提議「改成 --split_mode，這個參數一定要給，要用新 split 就再給 --split_file」。
+- **What changed:**
+  - `run.py` 新增 `--split_mode {file,builtin}`，**刻意無預設值**；新增 `_validate_split_args()` 在 parse 後做交叉檢查。
+  - 規則：設了 `--segment_col` 就**必須**給 `--split_mode`；`file` 必須配 `--split_file`（且檔案須存在）；`builtin` 不可配 `--split_file` 或 `--fold`；沒有 `--segment_col` 時三個參數都不可給。
+  - `Data_Loader` 的內建切法訊息由 `[WARNING]` 改為 `[split builtin]`（現在是明確選擇，不再是意外回退）。
+  - 三支既有 sweep 腳本補上 `--split_mode builtin` 以維持原行為。
+- **Why:** 先前 `--split_file` 是選用參數，忘了帶會**靜默**回退到內建切法，訓練照跑、結果照出。實驗矩陣要跑 36 runs，漏帶會讓結果不可比且極難察覺。改成必填後，忘記帶就直接報錯。
+- **Files touched:** `run.py`、`data_provider/Data_Loader.py`、`run_dlinearmix2_sweep.sh`、`run_dlinearmix2_sweep_criterion.sh`、`run_dlinearmix2_sweep_noHL01.sh`。
+- **Result/verification:** 六種錯誤路徑全部正確攔截（缺 split_mode／file 缺 split_file／builtin 配 split_file／builtin 配 fold／split_file 檔案不存在／無 segment_col 卻給 split_mode）。兩條合法路徑正常：`builtin` → train 20,173；`file --fold 2` → `[split_file] (fold_2): train=104 val=32 test=15 unused=28`、train **18,413**，與 `build_splits.py` 的 fold_2 數字完全一致。
+- **Follow-ups:** 實驗矩陣 36 runs；驅動腳本一律用 `--split_mode file --split_file ... --fold k`。
 
 ### 2026-09-10T16:20:00+08:00 — 未給 --split_file 時加警告；釐清「重疊 vs leakage vs 重複」三者不同
 - **Trigger:** 使用者追問「不給 split_file 會不會一直用到舊的內建切法」「說有重疊為何四種組合都 0 leakage」。
@@ -293,7 +306,7 @@
 - [x] 修正閘門整列 merge_asof 缺陷（2026-09-02，改逐欄；NaN 79.8%→7.1%）。
 - [x] 產出舊法對照組訓練 CSV `dataset/train_old.csv`（2026-09-02）。
 - [x] fold 數定為 **3**（2026-09-02）。
-- [ ] **實驗矩陣 36 runs**：因子驅動腳本 + anchored/non-anchored 合併總表。**驅動腳本每個 run 都必須帶 `--split_file`**（未帶會靜默回退到內建切法，現已有警告）。
+- [ ] **實驗矩陣 36 runs**：因子驅動腳本 + anchored/non-anchored 合併總表。驅動腳本一律用 `--split_mode file --split_file ... --fold k`（`--split_mode` 現為必填，漏帶會直接報錯）。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
 - [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**

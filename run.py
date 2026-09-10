@@ -66,6 +66,38 @@ def _expand_col_patterns(patterns, available_cols):
     return out
 
 
+def _validate_split_args(parser, args):
+    """強制 split 方式必須明講，避免靜默回退到舊的內建切法。
+
+    --split_mode 刻意沒有預設值：忘了帶就直接報錯，而不是安靜地用另一種切法
+    跑完 —— 後者會讓整批實驗結果不可比且難以察覺。
+    """
+    if not getattr(args, "segment_col", None):
+        for name in ("split_mode", "split_file", "fold"):
+            if getattr(args, name, None) is not None:
+                parser.error(f"--{name} 需要同時設定 --segment_col。")
+        return
+
+    if args.split_mode is None:
+        parser.error(
+            "已設定 --segment_col，必須明確指定 --split_mode：\n"
+            "  --split_mode file --split_file dataset/splits_<dataset>.csv"
+            "   （依 window 數切分、含重疊防護、可搭配 --fold 做 rolling-origin CV）\n"
+            "  --split_mode builtin"
+            "                                        （舊的依段數 70/10/rest，無重疊防護）"
+        )
+    if args.split_mode == "file":
+        if not args.split_file:
+            parser.error("--split_mode file 需要 --split_file（由 build_splits.py 產生）。")
+        if not os.path.exists(args.split_file):
+            parser.error(f"--split_file 找不到檔案：{args.split_file}")
+    else:  # builtin
+        if args.split_file:
+            parser.error("--split_mode builtin 不可與 --split_file 併用；要用 split 檔請改 --split_mode file。")
+        if args.fold is not None:
+            parser.error("--fold 只能搭配 --split_mode file 使用。")
+
+
 def _expand_col_args(args):
     """Read CSV header, expand wildcards in --input_col and --exog_col."""
     csv_path = os.path.join(args.root_path, args.data_path)
@@ -235,9 +267,14 @@ def main():
     parser.add_argument('--input_col', type=str, default=None, help='input column(s), e.g., HL02 or HL02,HL03')
     parser.add_argument('--exog_col', type=str, default=None, help='optional exogenous column(s), e.g., isRain or isRain,HL06')
     parser.add_argument("--segment_col", type=str, default=None, help="e.g., segment_id; if set, windows will not cross segments")
+    parser.add_argument("--split_mode", type=str, default=None, choices=["file", "builtin"],
+                        help="REQUIRED when --segment_col is set. 'file': use --split_file from "
+                             "build_splits.py (window-count boundaries, overlap guard, rolling-origin CV). "
+                             "'builtin': legacy 70/10/rest by segment count, no overlap guard. "
+                             "No default on purpose — the split must be an explicit choice.")
     parser.add_argument("--split_file", type=str, default=None,
                         help="segment-wise split assignment CSV from build_splits.py; "
-                             "overrides the built-in chronological 70/10/rest split")
+                             "required by (and only valid with) --split_mode file")
     parser.add_argument("--fold", type=int, default=None,
                         help="use fold_<k> column of --split_file for train/val (rolling-origin CV); "
                              "test hold-out stays fixed across folds")
@@ -340,7 +377,9 @@ def main():
     parser.add_argument('--devices', type=str, default='0', help='device ids for multi-gpu, e.g., 0,1')
 
     args = parser.parse_args()
-    
+
+    _validate_split_args(parser, args)
+
     run_id = time.strftime("%Y%m%d-%H%M%S")
 
     if args.model in ('DLinearMix', 'DLinearMix2'):
