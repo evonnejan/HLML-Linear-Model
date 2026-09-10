@@ -87,6 +87,34 @@ adj = pred - c              # 整條平移，使 adj[0] == x_last
 工具：`compute_anchored_mse.py`（raw / adj / persist 的 MSE/RMSE/MAE/Corr + 逐 horizon Corr）、
 `visualize_anchored.py`、`visualize_segment.py`、`slide_anchored_figure.py`。
 
+**⚠️ `x_last` 從哪裡來（常見誤解，務必看清楚）**
+
+anchored 與 persistence 都需要「最後一個 input 時刻的 HL01 值」。這個值**不是**從
+`--input_col` 來的，而是走 **target/label 那條路**：
+
+```
+Data_Loader.py:277      data_y = df_cur[[self.target]]          ← 只含 HL01
+Data_Loader.py:507-509  r_begin = s_end - label_len
+                        seq_y   = data_y[r_begin:r_end]
+                        → seq_y[label_len-1] == data_y[s_end-1]  ← 最後一個 input 時刻的 HL01
+exp/exp_Main2.py:547    last_input_target = batch_y[:, label_len-1:label_len, f_dim:]
+compute_anchored_mse.py:40-42   同一個表達式（重建 test dataset 後取）
+```
+
+`batch_y` 完全獨立於 `batch_x` / `input_col`。**因此把 HL01 排除在 `--input_col` 之外，
+不會讓 anchored 或 persistence 失效**——`run_dlinearmix2_sweep_noHL01.sh` 能產出 anchored
+結果即為佐證。
+
+這正是原則 1 的界線所在：
+
+| | 原則**禁止** | 原則**允許** |
+|---|---|---|
+| 用法 | HL01 整條 `seq_len` 歷史當 branch 通道 | HL01 在 `s_end-1` 的**單一最後值**當錨 |
+| 資料路徑 | `batch_x` ← `input_col` | `batch_y` ← `target` |
+| 後果 | 自迴歸過度依賴 | 只修 level，不影響模型學形狀 |
+
+`exp/exp_Main2.py:525-529` 會強制 `label_len >= 1`，否則 persistence 取不到最後一個 input 時刻。
+
 ### 3.4 多種 MSE 彙總（因降雨強度不均）
 
 meeting 5/20 決議的四種：window-weighted、per-segment 取平均、per-segment 中位數、

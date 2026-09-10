@@ -23,6 +23,10 @@
      「noHL01」這個檔名是否反證了 base sweep **確實**把 HL01 餵進去了？
   3. `PROGRESS.md` 第 5 節的標準訓練範例也用 `'HL*'`——照抄的人會直接違反本原則。
   4. 這是 bug、還是刻意保留的實驗變體？若是後者，為何沒有記載？
+- **⚠️ 不要與 anchored 混淆：** anchored / persistence 需要的「最後一個 input 時刻的 HL01 值」
+  走的是 **target/label 路徑**（`batch_y`），不是 `input_col`。把 HL01 排除在 `input_col`
+  之外**不會**讓 anchored 失效。詳見 `02-method-eval.md` §3.3。
+  本條要問的是另一件事：HL01 的**整條歷史**是否被當成 branch 通道餵進模型。
 
 ### T-02 主指標用 correlation，不用絕對誤差
 - **為什麼：** level 可事後校正，變化形式才是要學的。`[有出處]` 同上決策列

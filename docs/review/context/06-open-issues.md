@@ -18,6 +18,9 @@
   且 `PROGRESS.md` 第 5 節的標準範例指令也用 `'HL*'`——任何照抄的人都會踩到。
   更關鍵的是：**整個 level-bias 診斷與 roadmap 都建立在「HL01 不在 input」這個前提上**，
   若部分歷史實驗其實包含了 HL01，那些結果的詮釋需要重新檢視。
+- **不是這件事：** anchored / persistence 需要的 HL01 最後值走的是 `batch_y`（target 路徑），
+  與 `input_col` 無關，排除 HL01 不會讓 anchored 失效（見 `02-method-eval.md` §3.3）。
+  本條講的是 HL01 的**整條 `seq_len` 歷史**被當成 branch 通道。
 - **狀態：未處理。** 依「只記錄不修改」原則，本次未動任何程式碼。
 
 ### ⚠️ OI-02 sweep 腳本的 exog 與 build_splits 預設不一致
@@ -114,6 +117,13 @@ LTSF-Linear 是 Apache-2.0，需要標註來源與授權。論文與開源都會
 ### OI-17 訓練 CSV 有 UTF-8 BOM
 `train_*.csv` 有 BOM，`all_minute_wide.csv` 沒有。`_load_split_file` 明確處理了 BOM
 （`data_provider/Data_Loader.py:63`），主資料讀取路徑是否也處理需確認。
+
+### OI-19 `x_raw` 是死碼，且 fallback 有誤導性
+`data_provider/Data_Loader.py:426-433` 設定 `self.x_raw`，取的是 `x_cols[0]`（第一個 input 欄）。
+全 repo grep 確認**沒有任何地方讀它**。不影響正確性，但邏輯有誤導性：
+若 `input_col` 正確排除了 HL01，`x_cols[0]` 就是 **HL02**——將來若有人用 `x_raw` 畫 anchored 圖，
+會錯誤地錨到鄰站而非目標站（正是 roadmap 否決 NLinear 的同一個理由）。
+建議：移除，或改為明確取 `self.target`。
 
 ### OI-18 `Data_From_SQL_4.py` 半退役但仍被依賴
 它是 `SQLServerClient` 的定義處（被 `_all` import），但其中的切窗/segment 邏輯
