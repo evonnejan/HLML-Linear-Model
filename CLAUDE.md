@@ -53,6 +53,22 @@ Update if ANY applies; when unsure, lean towards recording.
 
 ---
 
+## Research review context / 研究審查脈絡
+
+`docs/review/` 是一套可重複執行的外部審查機制（spec 見該資料夾內的 design 檔）。
+`docs/review/` is a repeatable external-review system.
+
+- **分工 / Division:** `PROGRESS.md` 是 append-only 開發流水帳，回答「做過什麼」；
+  `docs/review/context/` 是靜態審查脈絡，回答「現況是什麼、為什麼這樣、程式在哪」。
+  Never duplicate: PROGRESS.md = history, context/ = current state.
+- **維護時機 / When to refresh `context/`:** 現行 pipeline 程式碼改動（`05-traceability.md`
+  的 `file:line` 會漂移）、`dataset/` 增減或重產、研究目標或成功判準變動、跑出新實驗結果
+  （`03-evidence.md` 的證據台帳）。**每次 review 前必須確認時效。**
+- **審查者的硬性限制 / Reviewer constraints:** 只出報告，不得修改任何檔案、不得跑訓練、
+  不得 commit/push。發現問題只記錄，不代為修正——修掉了就看不到原始狀態。
+
+---
+
 ## Project at a glance / 專案速覽
 
 - Water-level / rainfall time-series forecasting using DLinear-family linear models (LTSF-Linear).

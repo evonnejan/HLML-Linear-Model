@@ -27,7 +27,8 @@ logs/
 analysis/
 
 # ── Local agent / tooling state ──
-.claude/
+.claude/*
+!.claude/commands/
 docs/superpowers/
 
 # ── Node ──

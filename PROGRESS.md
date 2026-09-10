@@ -7,20 +7,19 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-10T18:52:00+08:00
-- **Current goal:** 建立一套可重複執行的研究審查機制（`docs/review/`），先完成**第一次完整 review**（審查者為 **Codex**），清掉 Blocker 後才啟動 36-run 實驗矩陣。
-- **Status (one line):** 資料前處理全部就緒且 0 leakage（`train_drycut_L3h_buf60.csv` 179 段/33,381 win、`train_old.csv` 159 段/31,440 win，各配 3-fold split，`--split_mode` 現為必填）；審查機制 spec 已定稿於 `docs/review/2026-09-10-research-review-system-design.md`（**設計完成、機制檔案尚未實作**）。**尚未開始跑實驗矩陣。**
+- **Last updated:** 2026-09-10T19:30:24+08:00
+- **Current goal:** 審查機制已建置完成，**下一步是執行第一次完整 review（審查者：Codex）**，清掉 Blocker 後才啟動 36-run 實驗矩陣。
+- **Status (one line):** 資料前處理全部就緒且 0 leakage（`train_drycut_L3h_buf60.csv` 179 段/33,381 win、`train_old.csv` 159 段/31,440 win，各配 3-fold split，`--split_mode` 現為必填）；**審查機制 `docs/review/` 已全部產出並可執行**（README + context 00–06 + protocol 4 檔 + reports/TEMPLATE + slash command）。撰寫 context 過程中發現 **6 個未處理的意圖–實作疑點（OI-01~OI-06）**，依原則只記錄未修改。**尚未開始跑實驗矩陣。**
 - **Next steps:**
-  1. **依 spec 產出 `docs/review/` 全部檔案**：`README.md`、`context/00~06`、`protocol/PROTOCOL.md + block-D/C/M`、`reports/TEMPLATE.md`；並改 `.gitignore`（`.claude/` → `.claude/*` + `!.claude/commands/`）、加 `.claude/commands/research-review.md`、`CLAUDE.md` 增補 context 維護規則。撰寫 context 時**必須實際讀 code、實際跑資料統計**，不得轉抄本檔。
-  2. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。
-  3. **清掉報告中的 Blocker。**
-  4. **才啟動實驗矩陣 36 runs**：資料集(2: drycut/舊法) × exog(3: isRain / 無 / min_since_rain) × loss(2: mse/huber) × fold(3) × seed(1)，約 4.2 小時。需新寫 (i) 因子驅動腳本 (ii) 把 anchored 指標併進同一張總表的彙整器。
-  5. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
+  1. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。啟動方式見 `docs/review/README.md`「審查者：從這裡開始」。
+  2. **清掉報告中的 Blocker**，特別是 OI-01（`--input_col 'HL*'` 把 HL01 餵進模型）。
+  3. **才啟動實驗矩陣 36 runs**：資料集(2: drycut/舊法) × exog(3: isRain / 無 / min_since_rain) × loss(2: mse/huber) × fold(3) × seed(1)，約 4.2 小時。需新寫 (i) 因子驅動腳本 (ii) 把 anchored 指標併進同一張總表的彙整器。
+  4. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
 - **Open questions / blockers:** 無 blocker。待決：成功判準**尚無數字門檻**（僅「主指標 corr、須打敗 persistence」），已列為 review 的重點質疑項；split 方式（隨機 per-segment 暫緩）；exog 路徑是否有效（待 #2 ablation）；**buffer=60 讓 5/20「後置 60min 混合動態」的疑慮重新浮現**（見 `docs/model_roadmap.md` 第 5 節）。資料來源為本機 `dataset/all_minute_wide.csv`（2026-06-02 產、2026-09-02 重建閘門欄，2024-08-13 16:01~2025-08-03 23:59，511,679 分鐘），**未重抓 SQL**；要延長範圍需回 SQL 環境重跑 `Data_From_SQL_all.py`。
 - **Must-know handoff points:**
   - **審查機制（2026-09-10 定案，spec 見 `docs/review/2026-09-10-research-review-system-design.md`）**：核心命題是**意圖 ↔ 實作一致性**（「我宣稱要做的」vs「程式實際做的」），外加 bug／優化／方向三軸。材料分三級：**Tier 0 事實**（程式碼、`dataset/` 實際內容，唯一權威）、**Tier 1 受審宣稱**（`docs/review/context/*`）、**Tier 2 背景**（本檔、`docs/model_roadmap.md`、`meeting_recap.txt` 等）；Tier 1/2 與 Tier 0 不符即為 finding。審查者**只出報告、不改任何檔案、不得跑訓練**。
   - **順序已定案：先 review、後實驗矩陣。** 理由：矩陣約 4.2 小時且吃 `train_drycut_L3h_buf60.csv` / `splits_*.csv`，若 review 抓到資料譜系／欄位語意／leakage 層級問題，先跑的實驗整批作廢。review 報告即矩陣的 go/no-go 依據。
-  - **待查疑點（review 重點）**：本檔第 5 節訓練範例為 `--input_col 'HL*' --target HL01`，而 `run.py:70` 有萬用字元展開；字面上 `HL*` 會把 HL01 展進 input，**與「不放 HL01 自身歷史」原則衝突**。尚未確認是否另有排除機制。
+  - **⚠️ 已證實的意圖–實作不符（OI-01）**：`run.py:44-66` 的 glob 展開**不排除 target**，`Data_Loader:247-250` 也沒有把關（唯一驗證是 input/exog 不可互相重疊，`run.py:169-174`）。`run_dlinearmix2_sweep.sh:25` 用 `--input_col 'HL*'` + `--target HL01` → **HL01 被當成 branch input**，直接違反核心原則；而 `run_dlinearmix2_sweep_noHL01.sh:25` / `_criterion.sh:28` 用明列的 `HL02..HL06`。「noHL01」這個檔名本身即為佐證。本檔第 5 節的範例指令也用 `'HL*'`，照抄即中招。**依「只記錄不修改」原則未動程式碼**，完整記載見 `docs/review/context/06-open-issues.md`。
   - **系統定位（2026-09-02 定案）**：**即時預警系統**；虛擬水位量測是更長遠目標。此定位決定 delta-target 可行（推論時有 HL01 當下值當錨）；若日後轉向虛擬量測，roadmap #1/#4 需重新設計。
   - **核心發現**：HL01 不在 input（input=HL02–06+exog）→ 無 level 錨 → 每 window 固定偏移；persistence 因此贏 raw 模型（raw MSE 20884 / anchored 1537 / persist 2430；Corr 0.819→0.988）。**注意：此組數字產生於 2026-06-30 的舊資料、舊切分、閘門有缺陷時期，不可當現況證據——現行 pipeline 至今無任何模型結果。**
   - **原則**：不放 HL01 自身歷史當 input（會自迴歸依賴）；用 HL01 最後值當外部錨可以。主指標 = **correlation**。
@@ -88,6 +87,34 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-10T19:30:24+08:00 — 建置研究審查機制 `docs/review/`，並發現 6 個意圖–實作疑點
+- **Trigger:** 使用者指示「先幫我把會用到的東西補齊」。
+- **What changed:** 依 spec 產出審查機制全部檔案，**未修改任何程式碼或資料**。
+  - `docs/review/README.md`（入口與閱讀順序）
+  - `docs/review/context/00-overview.md` ~ `06-open-issues.md`（7 檔，受審宣稱 Tier 1）
+  - `docs/review/protocol/PROTOCOL.md` + `block-D-data.md` / `block-C-code.md` / `block-M-method.md`
+  - `docs/review/reports/TEMPLATE.md`（固定 schema，跨次可比對）
+  - `.claude/commands/research-review.md`（slash command）
+  - `.gitignore`：`.claude/` → `.claude/*` + `!.claude/commands/`（讓觸發器進版控，其餘本機狀態照舊忽略）
+  - `CLAUDE.md`：新增「Research review context」節（context/ 的維護時機、與本檔的分工、審查者硬性限制）
+- **Why:** 讓外部 agent（Codex）能對「意圖 ↔ 實作一致性 / bug / 優化 / 方向」做可重複、可跨次比對的審查。
+- **作業原則（已遵守）:** ①只記錄不修改——寫 context 時發現的問題全部列入 `06-open-issues.md`，未動任何程式碼 ②`file:line` 逐支實際讀 code 取得，未轉抄本檔 ③資料統計實跑取得，未轉抄本檔。
+- **Commands run:** 資料盤點（`wc -l` / `head` / `tail` / `od` 逐檔）、pandas 統計（NaN 率、段數、段長、`isRain` 與 `min_since_rain` 分布）、程式碼閱讀（`sed -n` / `grep -n`）。**未執行訓練，未改動任何程式或資料。**
+- **Result/verification（本次實測，與既有宣稱一致）:**
+  - `all_minute_wide.csv` 511,679 列 / 23 欄；閘門任一欄 NaN **7.06%**（逐欄 6.77–6.81%）
+  - `train_drycut_L3h_buf60.csv` 54,590 列 / **179 段** / 30 欄；段長 min 130 / 中位 200 / max 2,040；閘門 NaN **3.48%**；`isRain` True 33,110 / False 21,480
+  - `train_old.csv` 50,489 列 / **159 段** / 30 欄；`isRain` True **31,409**（= `water_level_all2.csv` 列數，交叉驗證通過）
+  - `min_since_rain`（drycut）：0 ~ **24,240** 分鐘，NaN 60 列
+- **⚠️ 發現的 6 個疑點（皆未處理，留給 review 判定）:**
+  - **OI-01** `--input_col 'HL*'` 會把目標站 HL01 餵進模型（`run.py:44-66` 不排除 target；`run_dlinearmix2_sweep.sh:25` 實際使用）——直接違反核心原則
+  - **OI-02** sweep 腳本的 `--exog_col` 仍是 `isRain,...`，但 `build_splits.py:239` 預設已改 `min_since_rain,...` → 算 window 數與訓練時的 NaN-check 欄位不同，window 數可能對不上
+  - **OI-03** `L >= 2*buffer` 似乎沒有在 `build_drycut_segments_meta.py` 被強制
+  - **OI-04** 主指標 corr 是跨 window pooled（`exp/exp_Main2.py:184-221`），在有 level bias 時可能不反映段內動態
+  - **OI-05** `run.py:119-156` 用自己的 70% 規則切 train 判斷常數欄，與實際 `--split_file` 無關
+  - **OI-06** `build_splits.py:139-142` 候選邊界全被 blocked 時會退回不設限，可能靜默切開重疊群組
+- **Files touched:** `docs/review/`（13 檔新增）、`.claude/commands/research-review.md`(新增)、`.gitignore`、`CLAUDE.md`、`PROGRESS.md`。
+- **Follow-ups:** 執行第一次 review（Codex）→ 清 Blocker → 才跑 36-run 實驗矩陣。
 
 ### 2026-09-10T18:52:00+08:00 — 定案「可重複執行的研究審查機制」spec（未實作任何機制檔案）
 - **Trigger:** 使用者要求把研究主題／目標／進度／核心程式碼整理成文件，交給另一個 agent（**Codex**）審查「我有沒有做錯、有沒有在往目標前進」；討論中擴充為一套**可重複執行**的審查機制。
@@ -335,12 +362,13 @@
 - [x] 產出舊法對照組訓練 CSV `dataset/train_old.csv`（2026-09-02）。
 - [x] fold 數定為 **3**（2026-09-02）。
 - [x] 定案研究審查機制 spec（2026-09-10，`docs/review/2026-09-10-research-review-system-design.md`）。
-- [ ] **依 spec 產出 `docs/review/` 全部檔案**（`README.md` / `context/00~06` / `protocol/PROTOCOL.md + block-D/C/M` / `reports/TEMPLATE.md`）。撰寫 context 時須實際讀 code、實際跑資料統計，不得轉抄本檔。
-- [ ] 改 `.gitignore`：`.claude/` → `.claude/*` + `!.claude/commands/`；新增 `.claude/commands/research-review.md`。
-- [ ] `CLAUDE.md` 增補規則：`docs/review/context/` 須在每次 review 前確認時效。
+- [x] 依 spec 產出 `docs/review/` 全部檔案（2026-09-10，13 檔）。
+- [x] 改 `.gitignore` 並新增 `.claude/commands/research-review.md`（2026-09-10）。
+- [x] `CLAUDE.md` 增補「Research review context」節（2026-09-10）。
 - [ ] **第一次完整 review**（審查者：Codex）→ `docs/review/reports/YYYY-MM-DD-r01/report.md`。
 - [ ] 清掉第一次 review 報告中的 Blocker。
-- [ ] 釐清待查疑點：`--input_col 'HL*'` 是否真的把 HL01 展進 input（`run.py:70` 萬用字元展開）。
+- [ ] **修 OI-01：`--input_col 'HL*'` 會把 HL01 餵進模型**（已證實，`run.py:44-66` 不排除 target；`run_dlinearmix2_sweep.sh:25` 實際使用）。待 review 判定嚴重度後處理。
+- [ ] 處理 OI-02 ~ OI-06（見 `docs/review/context/06-open-issues.md`）。
 - [ ] 補上成功判準的數字門檻（目前僅「主指標 corr、須打敗 persistence」，無門檻）。
 - [ ] **實驗矩陣 36 runs（待第一次 review 的 Blocker 清完才啟動）**：因子驅動腳本 + anchored/non-anchored 合併總表。驅動腳本一律用 `--split_mode file --split_file ... --fold k`（`--split_mode` 現為必填，漏帶會直接報錯）。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
