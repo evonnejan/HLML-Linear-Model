@@ -7,20 +7,27 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-10T18:30:00+08:00
-- **Current goal:** 閘門前處理缺陷已修、兩個資料集（drycut / 舊法對照組）與 3-fold split 皆已備妥。下一步是跑實驗矩陣（36 runs），之後才進 roadmap #1 delta-target。
-- **Status (one line):** 資料前處理全部就緒：`train_drycut_L3h_buf60.csv`（179 段/33,381 win）與 `train_old.csv`（159 段/31,440 win）走同一條前處理路徑，各配 3-fold split，且 `build_splits.py` 新增重疊防護後**兩者的 split 與所有 fold 皆 0 leakage**。**尚未開始跑實驗矩陣。**
+- **Last updated:** 2026-09-10T18:52:00+08:00
+- **Current goal:** 建立一套可重複執行的研究審查機制（`docs/review/`），先完成**第一次完整 review**（審查者為 **Codex**），清掉 Blocker 後才啟動 36-run 實驗矩陣。
+- **Status (one line):** 資料前處理全部就緒且 0 leakage（`train_drycut_L3h_buf60.csv` 179 段/33,381 win、`train_old.csv` 159 段/31,440 win，各配 3-fold split，`--split_mode` 現為必填）；審查機制 spec 已定稿於 `docs/review/2026-09-10-research-review-system-design.md`（**設計完成、機制檔案尚未實作**）。**尚未開始跑實驗矩陣。**
 - **Next steps:**
-  1. **實驗矩陣 36 runs**：資料集(2: drycut/舊法) × exog(3: isRain / 無 / min_since_rain) × loss(2: mse/huber) × fold(3) × seed(1)，約 4.2 小時。需新寫 (i) 因子驅動腳本 (ii) 把 anchored 指標併進同一張總表的彙整器。
-  2. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
-- **Open questions / blockers:** 無 blocker。待決：split 方式（目前沿用 loader 內建 70/10/rest；隨機 per-segment 暫緩）；exog 路徑是否有效（待 #2 ablation）；**buffer=60 讓 5/20「後置 60min 混合動態」的疑慮重新浮現**（見 `docs/model_roadmap.md` 第 5 節）。資料來源為本機 `dataset/all_minute_wide.csv`（2026-06-02 產，2024-08-13 16:01~2025-08-03 23:59，511,679 分鐘），**未重抓 SQL**；要延長範圍需回 SQL 環境重跑 `Data_From_SQL_all.py`。
+  1. **依 spec 產出 `docs/review/` 全部檔案**：`README.md`、`context/00~06`、`protocol/PROTOCOL.md + block-D/C/M`、`reports/TEMPLATE.md`；並改 `.gitignore`（`.claude/` → `.claude/*` + `!.claude/commands/`）、加 `.claude/commands/research-review.md`、`CLAUDE.md` 增補 context 維護規則。撰寫 context 時**必須實際讀 code、實際跑資料統計**，不得轉抄本檔。
+  2. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。
+  3. **清掉報告中的 Blocker。**
+  4. **才啟動實驗矩陣 36 runs**：資料集(2: drycut/舊法) × exog(3: isRain / 無 / min_since_rain) × loss(2: mse/huber) × fold(3) × seed(1)，約 4.2 小時。需新寫 (i) 因子驅動腳本 (ii) 把 anchored 指標併進同一張總表的彙整器。
+  5. roadmap #1 **delta-target**，續接 #2–#6。完整版見 `docs/model_roadmap.md`。
+- **Open questions / blockers:** 無 blocker。待決：成功判準**尚無數字門檻**（僅「主指標 corr、須打敗 persistence」），已列為 review 的重點質疑項；split 方式（隨機 per-segment 暫緩）；exog 路徑是否有效（待 #2 ablation）；**buffer=60 讓 5/20「後置 60min 混合動態」的疑慮重新浮現**（見 `docs/model_roadmap.md` 第 5 節）。資料來源為本機 `dataset/all_minute_wide.csv`（2026-06-02 產、2026-09-02 重建閘門欄，2024-08-13 16:01~2025-08-03 23:59，511,679 分鐘），**未重抓 SQL**；要延長範圍需回 SQL 環境重跑 `Data_From_SQL_all.py`。
 - **Must-know handoff points:**
+  - **審查機制（2026-09-10 定案，spec 見 `docs/review/2026-09-10-research-review-system-design.md`）**：核心命題是**意圖 ↔ 實作一致性**（「我宣稱要做的」vs「程式實際做的」），外加 bug／優化／方向三軸。材料分三級：**Tier 0 事實**（程式碼、`dataset/` 實際內容，唯一權威）、**Tier 1 受審宣稱**（`docs/review/context/*`）、**Tier 2 背景**（本檔、`docs/model_roadmap.md`、`meeting_recap.txt` 等）；Tier 1/2 與 Tier 0 不符即為 finding。審查者**只出報告、不改任何檔案、不得跑訓練**。
+  - **順序已定案：先 review、後實驗矩陣。** 理由：矩陣約 4.2 小時且吃 `train_drycut_L3h_buf60.csv` / `splits_*.csv`，若 review 抓到資料譜系／欄位語意／leakage 層級問題，先跑的實驗整批作廢。review 報告即矩陣的 go/no-go 依據。
+  - **待查疑點（review 重點）**：本檔第 5 節訓練範例為 `--input_col 'HL*' --target HL01`，而 `run.py:70` 有萬用字元展開；字面上 `HL*` 會把 HL01 展進 input，**與「不放 HL01 自身歷史」原則衝突**。尚未確認是否另有排除機制。
   - **系統定位（2026-09-02 定案）**：**即時預警系統**；虛擬水位量測是更長遠目標。此定位決定 delta-target 可行（推論時有 HL01 當下值當錨）；若日後轉向虛擬量測，roadmap #1/#4 需重新設計。
-  - **核心發現**：HL01 不在 input（input=HL02–06+exog）→ 無 level 錨 → 每 window 固定偏移；persistence 因此贏 raw 模型（raw MSE 20884 / anchored 1537 / persist 2430；Corr 0.819→0.988）。
+  - **核心發現**：HL01 不在 input（input=HL02–06+exog）→ 無 level 錨 → 每 window 固定偏移；persistence 因此贏 raw 模型（raw MSE 20884 / anchored 1537 / persist 2430；Corr 0.819→0.988）。**注意：此組數字產生於 2026-06-30 的舊資料、舊切分、閘門有缺陷時期，不可當現況證據——現行 pipeline 至今無任何模型結果。**
   - **原則**：不放 HL01 自身歷史當 input（會自迴歸依賴）；用 HL01 最後值當外部錨可以。主指標 = **correlation**。
   - **L 與 buffer 的作用**：L 決定「多長的無雨算確定乾、要剔除」→ 控制切點與段數；buffer 決定「每段兩端往被剔除的乾段延伸多少」→ 保留退水尾巴並救活短段。約束 `L >= 2*buffer` 保證相鄰 window 不重疊（結構性避免 leakage，舊法沒有這個保證）。
   - **可用段門檻 = `seq_len + pred_len`，不是固定值**（舊紀錄誤用 75min）。seq_len=96 → 111min；`run.py` 預設 seq_len=60 → 75min。L=3h/buf=60 下 seq_len≤96 皆 179/179 可用，seq_len≥120 開始出現死段。
   - anchored 工具：`compute_anchored_mse.py`（raw/adj/persist 的 MSE/RMSE/MAE/Corr + 逐 horizon Corr）、`visualize_segment.py`、`slide_anchored_figure.py`、`visualize_anchored.py`；乾段 anchored 直接讀 `eval_dry/*/predictions.npz` 的 `persist`。
+  - **交付注意**：`dataset/`、`.claude/`、`docs/superpowers/`、`meeting_recap.txt` 皆已 gitignore。審查者需要讀資料，因此**必須交本機資料夾，不能只給 GitHub repo**。
   - Repo：`github.com/evonnejan/HLML-Linear-Model`；DB 不可寫死帳密；大型輸出（含 `dataset/`、`analysis/`）已 gitignore。
 
 ---
@@ -44,6 +51,10 @@
 | 2026-09-02 | 系統定位＝**即時預警**，虛擬水位量測列為長遠目標 | 即時預警推論時有 HL01 當下值可當錨 → delta-target 可行；虛擬量測沒有 HL01，該路不通（`meeting_recap.txt` 5/20 已註明） | 直接做虛擬量測（否決：會封死 roadmap #1/#4） |
 | 2026-09-02 | drycut 定 **L=3h, buffer=60min** | buf=60 是唯一讓 179 段 100% 可生訓練 window 的設定（buf=0 僅 72 段、buf=30 僅 98 段），且 34,900 win 已超過舊法 32,999；L 在 buf=60 下不敏感，選 3 保留最多段數與最細事件粒度 | buf=90（否決：多出的 1 萬 win 是純乾 padding）／L=4~6（否決：段數更少、無額外好處）／另立小碎段丟棄規則（否決：buf=60 後問題自動消失） |
 | 2026-06-30 | 不放 HL01 自身歷史當 input；主指標用 correlation | 放 HL01 歷史會自迴歸過度依賴(試過)；level 可校正、變化形式才是學的重點 | 加 HL01 自迴歸（否決） |
+| 2026-09-10 | 建立可重複執行的研究審查機制，採**方案 B**（平台無關的純 Markdown 核心 + Claude Code slash command 薄封裝），保留升級至多 subagent 分工（方案 C）的路徑 | 價值全在 context/protocol/報告格式三者，且審查者是 **Codex**，核心必須平台無關；slash command 僅約 15 行的本地便利 | 方案 A 純 Markdown（否決：本地重跑不便）／方案 C 多 subagent 分工（暫緩：尚未跑過一次，不知瓶頸何在，屬未驗證的複雜度） |
+| 2026-09-10 | 審查文件放 `docs/review/`，且 `context/`、`protocol/` 各自拆多檔 | `docs/superpowers/` 已 gitignore，spec 會遺失版控；`01-data.md` 需寫厚而不拖垮其他章；三個 block 各自成檔，升級 C 時「一檔配一 agent」零重寫 | 沿用 `docs/superpowers/specs/`（否決：不進版控）／單一大檔 CONTEXT.md（否決：資料節過厚、不利升級 C） |
+| 2026-09-10 | **先做第一次 review，再跑 36-run 實驗矩陣** | 矩陣約 4.2 小時且吃 `train_drycut_L3h_buf60.csv` / `splits_*.csv`；若 review 抓到資料譜系／欄位語意／leakage 層級問題，先跑的實驗整批作廢。review 報告即矩陣的 go/no-go 依據 | 先跑實驗再 review（否決：可能白跑 4.2 小時） |
+| 2026-09-10 | 審查材料分三級（Tier 0 事實 / Tier 1 受審宣稱 / Tier 2 背景），衝突即為 finding；審查者只出報告、不改檔、不跑訓練 | 直接支撐核心命題「意圖 ↔ 實作一致性」；若讓審查者順手修改則破壞證據、看不到原始狀態 | 讓審查者自行判斷材料權威性（否決：會把我們的宣稱當事實）／允許審查者順手修正（否決：破壞證據） |
 
 ---
 
@@ -72,10 +83,27 @@
 - `technical_manual.md` / `technical_manual_xml.md` — 技術手冊。
 - `docs/model_roadmap.md` — **模型改進 roadmap 完整版**（六項的理由/否決方案/限制、系統定位、volatility 對策）。摘要見第 4 節。
 - `docs/` — 降雨事件定義比較、work summary、figures（注意：`docs/superpowers/` 已 gitignore）。
+- `docs/review/` — **研究審查機制**（2026-09-10 定案，**機制檔案尚未實作**）。`2026-09-10-research-review-system-design.md` 為 spec；預計產出 `README.md`、`context/00~06`（受審脈絡：目標／資料／方法與評估／證據台帳／程式碼地圖／意圖-實作對照表／已知弱點）、`protocol/`（`PROTOCOL.md` + block-D 資料 / block-C 程式碼 / block-M 方法與方向）、`reports/`（每次 review 一個資料夾）。
 
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-10T18:52:00+08:00 — 定案「可重複執行的研究審查機制」spec（未實作任何機制檔案）
+- **Trigger:** 使用者要求把研究主題／目標／進度／核心程式碼整理成文件，交給另一個 agent（**Codex**）審查「我有沒有做錯、有沒有在往目標前進」；討論中擴充為一套**可重複執行**的審查機制。
+- **What changed:** 新增 `docs/review/2026-09-10-research-review-system-design.md`（設計 spec，238 行）。**未寫任何機制檔案、未動任何程式碼或資料。**
+- **Why:** 本檔是 append-only 開發流水帳，重心在「做了什麼」而非「為什麼相信這是對的」，且舊條目可能已被後續更正推翻；專案無成文的成功判準（僅「主指標 corr、須打敗 persistence」，無數字門檻）；根目錄 40+ 支 `.py` 與 `dataset/` 22 個檔混雜現行／一次性／歷史遺留／外來參考碼，外部審查者無法分辨、可能誤審死碼；使用者自己存疑之處散落各文件未集中。
+- **使用者需求（重點）:** ①「我想知道的是我想做的事情，我現行的程式是否有符合我的要求去做出來」→ 核心命題定為**意圖 ↔ 實作一致性** ②程式是否有 bug、有無可優化之處 ③ data 要完整仔細解釋、說明資料在哪、彼此有什麼不同 ④ 核心程式碼（現在與之後持續使用的）一定要 review 過 ⑤ 每次完整 review 都產出報告，且這套要**可重複使用** ⑥ 終點是**可投稿論文**，中途要能展示成果，尺度從嚴 ⑦ 審查者可讀 code 與資料、可跑抽查指令，但**不做實驗（不跑訓練）**。
+- **主要設計決策:** 見第 1 節新增的四列（方案 B／`docs/review/` 拆多檔／先 review 後實驗矩陣／材料三級分層）。
+- **Files touched:** `docs/review/2026-09-10-research-review-system-design.md`(新增)、`PROGRESS.md`。
+- **Commands run:** 僅唯讀探索（`ls -la dataset/`、`grep -n input_col run.py data_provider/Data_Loader.py`、`cat .gitignore`、`git log/status` 等）。**未執行任何會改動程式碼或資料的指令。**
+- **Result/verification:** spec 檔已寫出（238 行）。機制本身尚未實作，故無功能可驗證。
+- **探索中發現的待查疑點（已寫入 spec，留給 review）:**
+  - 本檔第 5 節訓練範例為 `--input_col 'HL*' --target HL01`，而 `run.py:70` 有萬用字元展開邏輯；字面上 `HL*` 會把 HL01 展進 input，**與「不放 HL01 自身歷史當 input」原則衝突**。尚未確認是否另有排除機制。
+  - `dataset/` 共 22 個檔（含 259MB 的 `wra_cogate_obs_long.csv`），現行／備份／中間產物／歷史遺留混雜，無成文說明。
+  - `.gitignore` 忽略了 `dataset/`、`.claude/`、`docs/superpowers/`、`meeting_recap.txt` → 交付審查必須給**本機資料夾**而非 GitHub repo；且 slash command 需改 `.gitignore` 才能進版控。
+- **過程中的一次自我修正:** 首次準備更新本檔時，用的是 session 起始（HEAD `eecd2a9`）的內容；實際檔案在此期間已因今日三個 commit（`3c6a701`/`e367621`/`a475fce`）更新。已重讀後 rebase，未覆蓋新內容。
+- **Follow-ups:** 依 spec 產出 `docs/review/` 全部檔案 → 第一次 review（Codex）→ 清 Blocker → 才跑 36-run 實驗矩陣。
 
 ### 2026-09-10T18:30:00+08:00 — 新增 --split_mode，split 方式改為必須明確指定
 - **Trigger:** 使用者提議「改成 --split_mode，這個參數一定要給，要用新 split 就再給 --split_file」。
@@ -306,7 +334,15 @@
 - [x] 修正閘門整列 merge_asof 缺陷（2026-09-02，改逐欄；NaN 79.8%→7.1%）。
 - [x] 產出舊法對照組訓練 CSV `dataset/train_old.csv`（2026-09-02）。
 - [x] fold 數定為 **3**（2026-09-02）。
-- [ ] **實驗矩陣 36 runs**：因子驅動腳本 + anchored/non-anchored 合併總表。驅動腳本一律用 `--split_mode file --split_file ... --fold k`（`--split_mode` 現為必填，漏帶會直接報錯）。
+- [x] 定案研究審查機制 spec（2026-09-10，`docs/review/2026-09-10-research-review-system-design.md`）。
+- [ ] **依 spec 產出 `docs/review/` 全部檔案**（`README.md` / `context/00~06` / `protocol/PROTOCOL.md + block-D/C/M` / `reports/TEMPLATE.md`）。撰寫 context 時須實際讀 code、實際跑資料統計，不得轉抄本檔。
+- [ ] 改 `.gitignore`：`.claude/` → `.claude/*` + `!.claude/commands/`；新增 `.claude/commands/research-review.md`。
+- [ ] `CLAUDE.md` 增補規則：`docs/review/context/` 須在每次 review 前確認時效。
+- [ ] **第一次完整 review**（審查者：Codex）→ `docs/review/reports/YYYY-MM-DD-r01/report.md`。
+- [ ] 清掉第一次 review 報告中的 Blocker。
+- [ ] 釐清待查疑點：`--input_col 'HL*'` 是否真的把 HL01 展進 input（`run.py:70` 萬用字元展開）。
+- [ ] 補上成功判準的數字門檻（目前僅「主指標 corr、須打敗 persistence」，無門檻）。
+- [ ] **實驗矩陣 36 runs（待第一次 review 的 Blocker 清完才啟動）**：因子驅動腳本 + anchored/non-anchored 合併總表。驅動腳本一律用 `--split_mode file --split_file ... --fold k`（`--split_mode` 現為必填，漏帶會直接報錯）。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
 - [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**
