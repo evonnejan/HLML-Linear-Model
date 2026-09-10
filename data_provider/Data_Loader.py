@@ -157,6 +157,15 @@ class Dataset_Custom(Dataset):
                 # split 決策抽離到 loader 之外，換切法不需動訓練碼。
                 train_ids, val_ids, test_ids = self._load_split_file(seg_col, seg_ids_sorted)
             else:
+                if self.set_type == 0:
+                    print(
+                        "[WARNING] --split_file not set: falling back to the built-in "
+                        "segment-count split (70/10/rest by SegmentStart order). "
+                        "This ignores per-segment window counts and has NO overlapping-segment "
+                        "guard, so overlapping segments may land in different splits (leakage). "
+                        "Pass --split_file (from build_splits.py) for the window-count split "
+                        "with overlap protection and rolling-origin CV."
+                    )
                 train_n = max(1, int(nseg * 0.7))
                 val_n = max(1, int(nseg * 0.1))
                 if train_n + val_n >= nseg:

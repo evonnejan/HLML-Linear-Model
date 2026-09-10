@@ -7,7 +7,7 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-10T15:40:00+08:00
+- **Last updated:** 2026-09-10T16:20:00+08:00
 - **Current goal:** 閘門前處理缺陷已修、兩個資料集（drycut / 舊法對照組）與 3-fold split 皆已備妥。下一步是跑實驗矩陣（36 runs），之後才進 roadmap #1 delta-target。
 - **Status (one line):** 資料前處理全部就緒：`train_drycut_L3h_buf60.csv`（179 段/33,381 win）與 `train_old.csv`（159 段/31,440 win）走同一條前處理路徑，各配 3-fold split，且 `build_splits.py` 新增重疊防護後**兩者的 split 與所有 fold 皆 0 leakage**。**尚未開始跑實驗矩陣。**
 - **Next steps:**
@@ -75,6 +75,25 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-10T16:20:00+08:00 — 未給 --split_file 時加警告；釐清「重疊 vs leakage vs 重複」三者不同
+- **Trigger:** 使用者追問「不給 split_file 會不會一直用到舊的內建切法」「說有重疊為何四種組合都 0 leakage」。
+- **What changed:** `data_provider/Data_Loader.py` 在走內建 70/10/rest 分支時印出警告，說明該路徑忽略 window 數且**沒有重疊防護**，並提示改用 `--split_file`。僅在 `flag='train'` 印一次。
+- **Why:** `--split_file` 是選用參數，忘了帶就會靜默回退到舊切法 —— 實驗矩陣要跑 36 runs，靜默回退會讓整批結果作廢且難以察覺。
+- **Files touched:** `data_provider/Data_Loader.py`。
+- **Result/verification:** 不給 `--split_file` → 警告出現、走內建切法（train 22,741 win）；給了 → 無警告、`[split_file] ... train=116 val=24 test=19`（train 23,606 win）。
+- **四種組合的 leakage 實測（重要澄清）:**
+  | | 舊 split（loader 內建，依段數） | 新 split（build_splits.py） |
+  |---|---|---|
+  | 舊 segmentation（32 對重疊） | 0 對 | 防護前 **1 對/11 分鐘**；防護後 0 對 |
+  | drycut（0 重疊） | 0 對 | 0 對 |
+  - **舊 split 的「安全」是巧合**：它依段數切（159 → 111/15/33），切點剛好沒落在任何重疊對之間；它對重疊完全無感，換資料/比例/seq_len 都可能踩到。
+  - 新 split 依 **window 數**找邊界，切點不同，剛好踩到 seg 141(val)/142(test)。防護後 seg 141 被推入 test，兩段同組。
+- **三個概念必須分清（先前敘述不夠精確）:**
+  1. **重疊**：`train_old.csv` 有 32 對 segment 的視窗重疊 —— 這是 **segmentation 的固有屬性**，split 消不掉。
+  2. **leakage**：重疊的兩段被分到不同 partition 才算。目前四種組合皆 0。
+  3. **重複**：重疊的分鐘**仍在同一 partition 內出現兩次**。實測 `train_old.csv` 有 **1,642 個分鐘重複（3,284 列，6.50%）**，`train_drycut_L3h_buf60.csv` 為 **0**。這不是 leakage，但那些分鐘在訓練中被雙倍加權，是舊法殘留的失真，**重疊防護不會修正它**（要修得改 segmentation，而 drycut 正是解法）。
+- **Follow-ups:** 實驗矩陣 36 runs；驅動腳本務必每個 run 都帶 `--split_file`。
 
 ### 2026-09-10T15:40:00+08:00 — build_splits 新增重疊防護；補上閘門與 leakage 的量化細節
 - **Trigger:** 使用者追問「segment 重疊該怎麼處理」「再撈 SQL 是否能拿到更完整資料」。
@@ -274,7 +293,7 @@
 - [x] 修正閘門整列 merge_asof 缺陷（2026-09-02，改逐欄；NaN 79.8%→7.1%）。
 - [x] 產出舊法對照組訓練 CSV `dataset/train_old.csv`（2026-09-02）。
 - [x] fold 數定為 **3**（2026-09-02）。
-- [ ] **實驗矩陣 36 runs**：因子驅動腳本 + anchored/non-anchored 合併總表。
+- [ ] **實驗矩陣 36 runs**：因子驅動腳本 + anchored/non-anchored 合併總表。**驅動腳本每個 run 都必須帶 `--split_file`**（未帶會靜默回退到內建切法，現已有警告）。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
 - [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**
