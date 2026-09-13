@@ -104,7 +104,7 @@
 
 ### T-15 `min_since_rain` 取代 `isRain` 當 exog
 - **為什麼：** `isRain` 實為核心/buffer 標記，會把**切分結構**洩漏給模型；`min_since_rain` 直接描述退水階段、有物理意義。`[有出處]` `PROGRESS.md` 第 1 節 2026-09-02 決策列
-- **實作位置：** 欄位產生於 `build_training_csv_from_meta.py:53-73`；`build_splits.py:239` 的預設 exog 已改為 `min_since_rain,...`
+- **實作位置：** 欄位產生於 `build_training_csv_from_meta.py:53-73`；`build_splits.py:248` 的預設 exog 已改為 `min_since_rain,...`
 - **請審查者確認：** ⚠️ **`run_dlinearmix2_sweep*.sh` 三支的 `--exog_col` 都還是 `isRain,...`**，與 `build_splits.py` 的預設不一致。這代表 (a) sweep 腳本尚未更新，且 (b) **算 window 數時用的 NaN-check 欄位與訓練時實際用的欄位不同** → window 數可能對不上（`min_since_rain` 有 60-70 列 NaN，`isRain` 沒有）。
 
 ### T-16 `isRain` 保留為實驗矩陣的對照組
@@ -121,19 +121,20 @@
 
 ### T-18 split 邊界依「可用 window 數」而非段數
 - **為什麼：** 段長差距 130~2040 分鐘，按段數切會使實際樣本比例嚴重偏離。`[有出處]` 同上
-- **實作位置：** `build_splits.py:58-78`（`count_windows_per_segment`）、`build_splits.py:128-145`（`pick_boundary`）
+- **實作位置：** `build_splits.py:58-78`（`count_windows_per_segment`）、`build_splits.py:128-154`（`pick_boundary`）
 - **請審查者確認：** `count_windows_per_segment` 的 NaN-aware 計數是否**逐行對齊** `Data_Loader` 的 `_drop_nan_windows`（`data_provider/Data_Loader.py:457-472`）？兩者用的 `check_cols` 是否相同？（見 T-15 的疑慮）
 
 ### T-19 segment 不拆、不跨 split
 - **為什麼：** 同一段的 window 高度相關，散落在不同 split 即為 leakage。`[有出處]` `meeting_recap.txt` 4/15
-- **實作位置：** `build_splits.py:147-168`（`assign_split` 以 segment 為單位）
+- **實作位置：** `build_splits.py:156-177`（`assign_split` 以 segment 為單位）
 - **請審查者確認：** 有沒有任何路徑會讓同一 `segment_id` 出現在兩個 split？
 
 ### T-20 重疊的 segment 必須留在同一 partition
 - **為什麼：** 重疊代表同一批分鐘同時屬於兩段；分到不同 split 就是 leakage。`[有出處]` `build_splits.py:80-89` docstring
-- **實作位置：** `build_splits.py:80-108`（`find_overlap_groups` 連通分量）、`build_splits.py:110-126`（`blocked_boundaries`）、`build_splits.py:139-142`（被 blocked 時的退回邏輯）
+- **實作位置：** `build_splits.py:80-108`（`find_overlap_groups` 連通分量）、`build_splits.py:110-126`（`blocked_boundaries`）、`build_splits.py:141-150`（blocked 過濾，其中 143-149 為 raise）
 - **✅ 已實測（2026-09-13）：** `rain_segments_meta.csv` 有 **24 組重疊群組、涵蓋 56 段**；對照 `splits_train_old.csv` 的 `split` 與 `fold_1..3`，**跨 partition 的群組 = 0**，fallback 未被觸發。
-- **請審查者確認：** `build_splits.py:134-140` 的 silent fallback（`allowed` 全空時退回含被禁刀口的完整候選）在什麼參數組合下會被觸發？是否該改成警告或 raise？
+- **✅ 已修（2026-09-13）：** silent fallback 改為 `raise ValueError`（`build_splits.py:143-149`），並把 `hi <= lo` 的提前返回納入 blocked 檢查。修改後重跑產生的兩份 split 與修改前逐位元組相同。
+- **請審查者確認：** raise 的條件是否過嚴或過鬆？錯誤訊息建議的補救方式（調 `--ratios` / `--n-folds` / `--init-train-frac`）是否真的可行？
 
 ### T-21 test 在所有 fold 間固定不變
 - **為什麼：** final hold-out 必須穩定，否則 fold 之間不可比。`[有出處]` `data_provider/Data_Loader.py:56-60` docstring
@@ -143,12 +144,12 @@
 
 ### T-22 rolling-origin 用 expanding window，不是 sliding
 - **為什麼：** 時序因果，train 只能往前擴張。`[有出處]` `PROGRESS.md` 2026-09-02T17:10
-- **實作位置：** `build_splits.py:170-208`（`assign_folds`）
+- **實作位置：** `build_splits.py:179-216`（`assign_folds`）
 - **請審查者確認：** fold_k 的 train 是否確實**包含**前一 fold 的 val 期間？有無時間倒錯？
 
 ### T-23 fold 數 = 3
 - **為什麼：** k=3 的 val 大小最平均且每折含 28–38 個降雨事件；k=4 有一折僅 15 段、k=6 有兩折僅 9 段。有效樣本單位是**事件**而非 window。`[有出處]` `PROGRESS.md` 第 1 節 2026-09-02 決策列
-- **實作位置：** `build_splits.py:244` 預設 `--n-folds 3`
+- **實作位置：** `build_splits.py:253` 預設 `--n-folds 3`
 - **請審查者確認：** 「有效樣本單位是事件」這個論點是否成立？3 折對論文而言是否足夠？
 
 ### T-24 `--split_mode` 必填，不得靜默回退

@@ -141,19 +141,19 @@ worst-decile per-segment。實作於 `exp/exp_Main2.py:696` 起的 `_save_segmen
    （`data_provider/Data_Loader.py:474-489`）
 3. **segment 不跨 split** → `build_splits.py` 以 segment 為最小單位切分，且用
    `find_overlap_groups`（`build_splits.py:80-108`）找出重疊群組，
-   `blocked_boundaries`（`build_splits.py:110-126`）禁止把同一群組切開
+   `blocked_boundaries`（`build_splits.py:110-126`）禁止把同一群組切開；候選全被 blocked 時直接 `raise`（`build_splits.py:143-149`，2026-09-13 新增）
 
 ### 4.2 切分方式
 
 `build_splits.py` 依**各段可用 window 數**（NaN-aware，對齊 `Data_Loader` 的
 `valid_starts` 邏輯，見 `build_splits.py:58-78`）決定邊界，**不是按段數切**——
 因為段長差距達 130~2040 分鐘，按段數切會讓實際樣本比例嚴重偏離。
-目標比例預設 `0.70,0.15,0.15`（`build_splits.py:243`）。
+目標比例預設 `0.70,0.15,0.15`（`build_splits.py:252`）。
 
 ### 4.3 Rolling-origin expanding-window CV
 
 在 dev（=train+val）內產 **3 個 fold**：塊 0 為起始 train，塊 1..k 依序當各 fold 的 val，
-train 逐 fold 擴張（`build_splits.py:170-208`）。**test 在所有 fold 間固定不變**
+train 逐 fold 擴張（`build_splits.py:179-216`）。**test 在所有 fold 間固定不變**
 （`data_provider/Data_Loader.py:83-86` 明確保證 test 沿用 `split` 欄）。
 
 fold=3 的依據：k=3 的 val 大小最平均（±4%）且每折含 28–38 個降雨事件；

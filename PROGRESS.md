@@ -7,8 +7,8 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-13T18:02:39+08:00
-- **Current goal:** 審查機制已建置完成，**下一步是執行第一次完整 review（審查者：Codex）**，清掉 Blocker 後才啟動 36-run 實驗矩陣。
+- **Last updated:** 2026-09-13T18:18:43+08:00
+- **Current goal:** 審查機制已建置完成、疑點已釐清、OI-06 已修，**下一步是執行第一次完整 review（審查者：Codex）**，清掉 Blocker 後才啟動 36-run 實驗矩陣。
 - **Status (one line):** 資料前處理全部就緒且 0 leakage；**審查機制 `docs/review/` 已全部產出、六個疑點已逐一查證釐清，可交 Codex 執行第一次 review**。查證結果：OI-03 **撤回**（誤報，檢查存在於 `build_drycut_segments_meta.py:91-92`）、OI-06 **降級**（實測 0 leakage，fallback 未觸發）、OI-04 **修正**（per-segment corr 已存在，待決的是 headline 指標選哪個）、OI-01/02/05 維持。**關鍵 anchored 數字經稽核未受污染。尚未開始跑實驗矩陣。**
 - **Next steps:**
   1. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。啟動方式見 `docs/review/README.md`「審查者：從這裡開始」。
@@ -88,6 +88,24 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-13T18:18:43+08:00 — 修掉 OI-06 的 silent fallback、新增 Block R（審查文件本身）
+- **Trigger:** 使用者指示：(1) 在 `allowed` 為空時 print 或 raise；(2) 不做 `--allow_target_in_input`；(3) 讓 Codex 一併審查 `docs/review/` 的 `.md` 是否有不合理之處。
+- **What changed（唯一一處程式碼改動）:**
+  - `build_splits.py` `pick_boundary`：候選邊界全被 blocked 時由「安靜退回不設限」改為 **`raise ValueError`**（`build_splits.py:143-149`），訊息載明候選區間、`target_frac` 與可調參數。同時把原本 `if hi <= lo: return lo` 的提前返回改為 `np.arange(lo, max(lo, hi)+1)` 併入 blocked 檢查——**該路徑先前會完全繞過 blocked 判斷**。
+  - 新增 `docs/review/protocol/block-R-docs.md`：把 `docs/review/` 的 `.md` 也列為受審對象（R1 事實錯誤 / R2 內部一致性 / R3 過度宣稱 / R4 遺漏 / R5 可用性），並要求把無法判定對錯的疑慮寫成問句放進「給使用者的問題」清單。
+  - `PROTOCOL.md` 由三個 block 改為四個；`README.md`、`reports/TEMPLATE.md` 同步（新增 Block R 段與「給使用者的問題」段）。
+  - `04-code-map.md`：**三支 `run_dlinearmix2_sweep*.sh` 由「現行輔助」改列「已棄用」**（都指向歷史遺留資料集 `water_level_rain_gate_all.csv` 且用 `--split_mode builtin`，將被 36-run 因子驅動腳本取代），並補上執行時間；`compute_anchored_mse.py` 補上輸入/輸出路徑。
+  - `06-open-issues.md`：OI-06 標為**已修**；OI-01 的修法建議依使用者決定**移除 `--allow_target_in_input`**，並註明副作用（`runs_sanity_seg/Linear_HL01-to-HL01` 這類 sanity run 將無法執行）。
+  - `05-traceability.md` / `02-method-eval.md` / `01-data.md`：`build_splits.py` 行號因改動而位移，全部更新（`assign_split` 156-177、`assign_folds` 179-216、`--ratios` 252、`--n-folds` 253、exog 預設 248）。
+- **Result/verification:**
+  - **修改後重跑 `build_splits.py` 產生兩份 split，與修改前逐位元組完全相同**（drycut 與 old 皆然）→ 確認 raise 不影響現行結果。
+  - drycut meta 實測 **0 對重疊、最小相鄰間隔 61 分鐘**（= L − 2×buffer + 1）；舊法 meta **32 對重疊、最小間隔 −80 分鐘** → 結構性保證確認成立。
+- **查詢結果（回答使用者提問）:**
+  - **anchored 是事後計算，不重跑模型**：輸入 `<run_dir>/outputs/pred.npy` + `true.npy`（+ `persist.npy` 若存在，否則依 `run_args.json` 重建 test dataset 取 `x_last`）；輸出 `<run_dir>/anchored_metric/`。現行那份在 `runs/DLinearMix2/DLinearMix2_HL02..HL06+exog(...)-to-HL01_sl60_pl15_st1-1_20260519-175611/anchored_metric/`，因該 run 的 `outputs/` 沒有 `persist.npy`，故 `x_last_source = "重建 test dataset"`。
+  - **sweep 執行時間**：base（含 HL01、未設 seed）2026-05-18 14:19–16:48；noHL01（seed=42）2026-05-18 18:20 → 05-19 09:15（跑一整夜）；criterion 2026-05-19 15:08–17:56。**三支之後都不會再用。**
+- **Files touched:** `build_splits.py`（唯一程式碼改動）、`docs/review/protocol/block-R-docs.md`(新增)、`docs/review/protocol/PROTOCOL.md`、`block-C-code.md`、`docs/review/README.md`、`docs/review/reports/TEMPLATE.md`、`docs/review/context/01/02/04/05/06`、`PROGRESS.md`、`dataset/splits_*.csv`（重產，內容不變）。
+- **Follow-ups:** 交 Codex 執行第一次 review（四個 block）→ 清 Blocker → 才跑 36-run 實驗矩陣。OI-01、OI-02、OI-05 仍未處理。
 
 ### 2026-09-13T18:02:39+08:00 — 六個疑點逐一查證：撤回 1、降級 1、修正 1，並完成 run 稽核
 - **Trigger:** 使用者逐項追問六個疑點，並質疑「anchored 應該需要用到 HL01」。
@@ -385,7 +403,9 @@
 - [ ] **第一次完整 review**（審查者：Codex）→ `docs/review/reports/YYYY-MM-DD-r01/report.md`。
 - [ ] 清掉第一次 review 報告中的 Blocker。
 - [ ] **修 OI-01：`--input_col 'HL*'` 會把 HL01 餵進模型**（已證實，`run.py:44-66` 不排除 target；`run_dlinearmix2_sweep.sh:25` 實際使用）。待 review 判定嚴重度後處理。
-- [ ] 處理 OI-02（sweep 的 `--exog_col` 仍為 `isRain`，未同步 `min_since_rain`）與 OI-05。
+- [x] 修 OI-06：`build_splits.py` 的 silent fallback 改為 raise（2026-09-13，重跑驗證 split 不變）。
+- [ ] 處理 OI-01（`target` 不可出現在 `input_col`/`exog_col` 的檢查；**使用者已決定不做放行參數**，需另行處理 sanity run）。
+- [ ] 處理 OI-02（三支 sweep 已列為已棄用，若新腳本沿用其參數需改 `--exog_col`）與 OI-05。
 - [x] 查證 OI-03（**撤回，誤報**）、OI-06（**降級**，實測 0 leakage）、OI-04（**修正**，per-segment corr 已存在）（2026-09-13）。
 - [ ] **決定 headline 主指標**：跨 window pooled corr vs per-segment 彙總（median / worst-decile）；early stopping 是否跟著改。
 - [x] 稽核全 repo run 的 `input_col`，確認 anchored 分析未受 HL01 污染（2026-09-13）。

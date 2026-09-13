@@ -28,11 +28,10 @@
 
 | 檔案 | 職責 |
 |---|---|
-| `compute_anchored_mse.py` | anchored 診斷：raw/adj/persist 的 MSE/RMSE/MAE/Corr + 逐 horizon Corr |
+| `compute_anchored_mse.py` | anchored 診斷（**事後計算，不重跑模型**）。輸入 `<run_dir>/outputs/pred.npy` + `true.npy`（+ `persist.npy` 若存在，否則依 `run_args.json` 重建 test dataset 取 `x_last`）；輸出到 `<run_dir>/anchored_metric/`：`anchored_metrics.json`、`metrics.csv`、`metrics_horizon.csv`、`segments/`。用法 `python compute_anchored_mse.py <run_dir>` |
 | `eval_dry.py` + `scripts/draw_eval_dry_diagrams.py` | 乾期評估與圖表 |
 | `visualize_segment.py` / `visualize_anchored.py` / `slide_anchored_figure.py` | anchored 相關視覺化 |
 | `visualize_drycut_segments.py` | drycut 切分結果檢視圖 |
-| `run_dlinearmix2_sweep*.sh` | 掃參腳本（base / criterion / noHL01 三個變體） |
 | `tests/test_merge_gate_data.py` | 目前 repo 內**唯一**的單元測試 |
 
 ## 3. 一次性分析（跑過就沒再用，不需審）
@@ -48,6 +47,7 @@
 | `Data_From_SQL.py` / `_2.py` / `_3.py` / `_5.py` | `Data_From_SQL_all.py` |
 | `Data_From_SQL_4.py` | ⚠️ **半退役**：仍是 `SQLServerClient` 的定義處，被 `_all` import；但其中的切窗/segment 邏輯已被 `build_*` 系列取代 |
 | `merge_gate_data.py` | 閘門合併邏輯已移入 `Data_From_SQL_all.py` / `rebuild_gate_columns.py`（但單元測試仍指向它） |
+| `run_dlinearmix2_sweep.sh` / `_noHL01.sh` / `_criterion.sh` | ⚠️ **已棄用**：三支都指向歷史遺留資料集 `water_level_rain_gate_all.csv`，且用 `--split_mode builtin`（舊的依段數 70/10/rest、無重疊防護）。計畫中的 36-run 因子驅動腳本會取代它們。執行紀錄：base sweep 2026-05-18 14:19–16:48（`--input_col 'HL*'`，含 HL01，未設 seed）；noHL01 sweep 2026-05-18 18:20 → 05-19 09:15（跑一整夜，seed=42）；criterion sweep 2026-05-19 15:08–17:56 |
 | `filter_wra_cogate_columns.py` | 一次性，產 `wra_cogate_obs_wide_gate_opening.csv` 後未再用 |
 | `models/DLinearMix.py` | `DLinearMix2.py`（early fusion → late fusion） |
 | `exp/exp_Main.py` | `exp_Main2.py` |

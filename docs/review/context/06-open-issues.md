@@ -32,14 +32,16 @@
   傾向 (B)：base 註解只提 "3 seq_len x 2 fusion" 完全沒提 HL01、noHL01 註解特別標
   "WITHOUT HL01 in input"、base 未設 seed 而 noHL01 有、且 5/19 之後所有 run 都改用明列欄位。
   **但這只是推論，請審查者一併詢問/評估。**
-- **建議的修法（尚未實作）：** 偵測到 `target ∈ input_col ∪ exog_col` 時報錯並印出展開後的欄位，
-  以 `--allow_target_in_input` 明示放行——因為 `runs_sanity_seg/Linear_HL01-to-HL01` 這類
-  sanity run 是刻意要做的，不能硬性禁止。
+- **建議的修法（尚未實作）：** 偵測到 `target ∈ input_col ∪ exog_col` 時報錯，並印出展開後的欄位清單
+  （`HL*` 這類靜默展開就不會再發生）。
+  **使用者已決定不做 `--allow_target_in_input` 之類的放行參數**（2026-09-13）。
+  副作用：`runs_sanity_seg/Linear_HL01-to-HL01` 這類刻意的 sanity run 將無法再執行，
+  需另行處理（例如改走獨立腳本）。**請審查者一併評估這個取捨。**
 - **狀態：未處理。** 依「只記錄不修改」原則，本次未動任何程式碼。
 
 ### ⚠️ OI-02 sweep 腳本的 exog 與 build_splits 預設不一致
 - **現象：** `run_dlinearmix2_sweep*.sh` 三支的 `--exog_col` 都是 `isRain,Past10Min,Past1Hr,Now,*gate_opening*`，
-  但 `build_splits.py:239` 的預設已改成 `min_since_rain,Past10Min,Past1Hr,Now,*gate_opening*`。
+  但 `build_splits.py:248` 的預設已改成 `min_since_rain,Past10Min,Past1Hr,Now,*gate_opening*`。
 - **為什麼嚴重：** `build_splits.py` 用 exog 欄位做 NaN-aware 的 window 計數。
   `min_since_rain` 有 60–70 列 NaN 而 `isRain` 沒有，**兩者算出的可用 window 數會不同**
   → split 檔記錄的 `n_windows` 與訓練時 loader 實際產生的數量可能對不上，
@@ -87,27 +89,19 @@ if l_minutes < 2 * buf:
   影響有限（只影響「要不要丟這一欄」的決策），但嚴格說是一種資訊洩漏。
 - **狀態：未處理。**
 
-### ⚠️ OI-06 `pick_boundary` 的 blocked fallback 是 silent fallback（**已降級**）
-- **現象：** `build_splits.py:134-140`
-
-  ```python
-  cand = np.arange(lo, hi + 1)
-  if blocked is not None:
-      allowed = cand[~blocked[cand]]
-      if len(allowed):        # ← 只有「還剩至少一個」時才採用
-          cand = allowed
-  # allowed 全空 → cand 維持含被禁止刀口的完整清單 → 可能切開重疊群組
-  ```
-
-  當 `[lo, hi]` 內**所有**候選邊界都會拆散重疊群組時，程式**安靜退回**使用全部候選，
-  等於允許切開重疊群組——而那正是 leakage 防護要擋的事。**沒有任何警告輸出。**
-- **✅ 實測結果（2026-09-13，已降級）：** 拿 `rain_segments_meta.csv` 重算重疊群組
-  （**24 組、涵蓋 56 段**），對照 `splits_train_old.csv` 逐一檢查 `split` 與 `fold_1..3`：
-  **跨 partition 的重疊群組 = 0 → fallback 未被觸發，現行切分無 leakage。**
-- **因此這是潛在風險而非現行 bug。** 目前候選範圍寬（`[1, 157]` 共 157 個刀口，
-  僅約 24 處 blocked），不可能全被擋住；但若日後 fold 數變多、候選範圍變窄，
-  或資料重疊變密，就可能踩到——**而且踩到了也沒人會知道**。
-- **建議：** `allowed` 為空時印出明顯警告或直接 raise，而不是安靜放行。一行的事。
+### ✅ OI-06 `pick_boundary` 的 silent fallback —— **已修（2026-09-13）**
+- **原現象：** `build_splits.py` 的 `pick_boundary` 在候選邊界全被 blocked（全都會拆散重疊群組）時
+  **安靜退回**使用全部候選，等於允許切開重疊群組，且無任何警告。
+- **修法：** 改為直接 `raise ValueError`，訊息載明候選區間、`target_frac` 與可調整的參數
+  （`build_splits.py:143-149`）。同時把原本 `if hi <= lo: return lo` 的提前返回也納入檢查——
+  該路徑先前會完全繞過 blocked 判斷。
+- **驗證：**
+  - 修改前實測：`rain_segments_meta.csv` 有 **24 組重疊群組、涵蓋 56 段**，
+    但 `splits_train_old.csv` 的 `split` 與 `fold_1..3` **跨 partition 群組 = 0** → fallback 未被觸發。
+  - 修改後重跑 `build_splits.py` 產生兩份 split，與修改前的檔案 **逐位元組完全相同**
+    （drycut 與 old 皆然）→ 確認此改動不影響現行結果，只在未來真的無安全解時才會擋下。
+  - drycut meta 實測 **0 對重疊、最小相鄰間隔 61 分鐘**（= L − 2×buffer + 1），
+    結構性保證成立，永遠不會走到這條路徑。
 
 ## B. 研究設計層面的待決問題
 

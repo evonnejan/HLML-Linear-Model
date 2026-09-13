@@ -58,14 +58,17 @@
    **在報告開頭標記，並以實際程式碼為準**。
 2. **先讀 `../reports/` 中最新一份報告**（若有），以便產出 delta。
 
-## §3 執行三個 block
+## §3 執行四個 block
 
-依序：**Block D（資料）→ Block C（程式碼）→ Block M（方法與方向）**。
+依序：**Block D（資料）→ Block C（程式碼）→ Block M（方法與方向）→ Block R（審查文件本身）**。
 各自的指示見：
 
 - `block-D-data.md`
 - `block-C-code.md`
 - `block-M-method.md`
+- `block-R-docs.md` ← **把 `docs/review/` 的 `.md` 也當成受審對象**；
+  它們是使用者委託撰寫的宣稱，已經出現過事實錯誤（見該檔開頭的實例）。
+  找出不合理之處，並把無法判定對錯的疑慮寫成**問句**放進「給使用者的問題」清單。
 
 ## §4 報告格式
 
@@ -78,8 +81,8 @@
 
 | 欄位 | 說明 |
 |---|---|
-| `ID` | `D-01` / `C-07` / `M-03`。**同一則跨次 review 沿用首次 ID** |
-| `區塊` | D / C / M |
+| `ID` | `D-01` / `C-07` / `M-03` / `R-02`。**同一則跨次 review 沿用首次 ID** |
+| `區塊` | D / C / M / R |
 | `子類` | 如 C1 意圖一致性、C2 bug、C3 優化 |
 | `嚴重度` | Blocker / Major / Minor / Nit |
 | `位置` | `file:line` 或 `dataset/` 檔名 |
@@ -100,16 +103,17 @@
 - 各嚴重度數量
 - **與前一份報告的 delta**：新增 / 已解決 / 仍存在
 - **方向判定**：前進 / 停滯 / 偏離 ＋ 理由
+- **給使用者的問題**：Block R 中你無法判定對錯、需使用者裁決的疑慮（問句形式，不計入嚴重度統計）
 
 ## §5 升級到多 agent 分工的條件
 
-目前是單一 agent 跑完三個 block。出現下列任一情況時，改成一個 block 配一個 subagent
-（三個 block 檔已刻意寫成可獨立抽出）：
+目前是單一 agent 跑完四個 block。出現下列任一情況時，改成一個 block 配一個 subagent
+（四個 block 檔已刻意寫成可獨立抽出）：
 
 - 單次 review 因 context 長度而漏審 MUST-REVIEW 清單中的檔案
 - Block C 的 findings 數量多到無法在一次 pass 內查證
 - `dataset/` 增長到抽查本身就佔滿預算
 - 需要對同一份程式碼做多個獨立視角的交叉驗證（例如兩個 agent 各自審 leakage，比對結論）
 
-升級時：`PROTOCOL.md` 保持不變（共用規則），三個 block 檔各自作為一個 subagent 的任務書，
+升級時：`PROTOCOL.md` 保持不變（共用規則），四個 block 檔各自作為一個 subagent 的任務書，
 最後由主 agent 依 §4 彙整成單一 `report.md`。

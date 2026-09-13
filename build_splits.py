@@ -130,15 +130,24 @@ def pick_boundary(cum: np.ndarray, total: int, target_frac: float, lo: int, hi: 
     """在 [lo, hi] 內挑一個 segment 邊界，使累積 window 佔比最接近 target_frac。
 
     回傳的 index 意義是「前 idx 個 segment 歸前一個 partition」。
-    blocked 標記的位置會拆散重疊群組，予以排除；若全被排除則退回不設限。
+    blocked 標記的位置會拆散重疊群組，必須排除。
+
+    若候選區間內**每個**位置都會拆散重疊群組，直接 raise —— 不可安靜退回不設限，
+    那等於在 train/val/test 之間製造 leakage 且無人察覺。
+    （drycut 以 `L >= 2*buffer` 結構性保證無重疊，不會走到這裡；
+      舊法 rain_segments_meta.csv 有 32 對重疊，才需要這道保護。）
     """
-    if hi <= lo:
-        return lo
-    cand = np.arange(lo, hi + 1)
+    cand = np.arange(lo, max(lo, hi) + 1)
     if blocked is not None:
         allowed = cand[~blocked[cand]]
-        if len(allowed):
-            cand = allowed
+        if len(allowed) == 0:
+            raise ValueError(
+                f"候選邊界區間 [{lo}, {hi}] 內每個位置都會拆散重疊的 segment 群組，"
+                f"無法在不造成 leakage 的前提下切分（target_frac={target_frac:.3f}）。"
+                " 請調整 --ratios / --n-folds / --init-train-frac，"
+                "或改用結構上無重疊的切分（drycut 以 L >= 2*buffer 保證無重疊）。"
+            )
+        cand = allowed
     target = total * target_frac
     err = np.abs(cum[cand] - target)
     return int(cand[int(np.argmin(err))])

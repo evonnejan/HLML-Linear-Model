@@ -40,7 +40,7 @@
 - **時間對齊** — `merge_asof` 的 direction 與 staleness、時區、排序假設
   （`data_provider/Data_Loader.py:474-489` 假設同 segment 的列連續且已排序）
 - **靜默失敗** — 例外被吞掉、fallback 悄悄改變行為
-  （例如 `build_splits.py:139-142` 的 blocked 退回）、`try/except: pass`
+  （`build_splits.py:143-149` 原本的 blocked 退回已於 2026-09-13 改為 raise——請確認還有沒有同類的靜默退回）、`try/except: pass`
 - **型別** — 布林欄位進 scaler、`int` vs `float` 的除法、`astype` 截斷
 - **可重現性** — 隨機種子是否被設定與記錄
 
