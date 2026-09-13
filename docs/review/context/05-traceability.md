@@ -81,7 +81,8 @@
 ### T-11 `L >= 2*buffer` 保證相鄰 window 不重疊
 - **為什麼：** 結構性避免 leakage，舊法沒有這個保證。`[有出處]` `PROGRESS.md` Snapshot handoff
 - **實作位置：** buffer 外擴在 `build_drycut_segments_meta.py:106-107`；重疊檢查在 `build_training_csv_from_meta.py:110-134`
-- **請審查者確認：** ⚠️ **`L >= 2*buffer` 這個約束在程式裡有被強制嗎？** 我沒有在 `build_drycut_segments_meta.py` 找到對應的 assert/檢查。若使用者給了 `--l-hours 1 --buffer 60`，程式會不會安靜地產出重疊的 meta？（下游 `check_no_overlap` 會擋，但那是第二道防線。）
+- **✅ 已確認（2026-09-13）：** 約束**有**被強制——`build_drycut_segments_meta.py:91-92` 在算出 `l_minutes` 與 `buf` 後立刻 `raise ValueError`。下游 `build_training_csv_from_meta.py:110-134` 的 `check_no_overlap` 為第二道防線。
+- **請審查者確認：** 兩道防線的條件是否等價？`--allow-overlap` 繞過第二道時，第一道是否仍然有效？
 
 ### T-12 buffer 用來保留退水尾巴並救活短段
 - **為什麼：** buf=0 僅 72 段可生 window、buf=30 僅 98 段、buf=60 全部 179 段可用。`[有出處]` `PROGRESS.md` 第 1 節 2026-09-02 決策列
@@ -131,7 +132,8 @@
 ### T-20 重疊的 segment 必須留在同一 partition
 - **為什麼：** 重疊代表同一批分鐘同時屬於兩段；分到不同 split 就是 leakage。`[有出處]` `build_splits.py:80-89` docstring
 - **實作位置：** `build_splits.py:80-108`（`find_overlap_groups` 連通分量）、`build_splits.py:110-126`（`blocked_boundaries`）、`build_splits.py:139-142`（被 blocked 時的退回邏輯）
-- **請審查者確認：** ⚠️ `pick_boundary` 在「候選邊界全被 blocked」時會**退回不設限**（`build_splits.py:139-142`）——這等於允許切開重疊群組。這個 fallback 會不會靜默造成 leakage？有沒有警告？
+- **✅ 已實測（2026-09-13）：** `rain_segments_meta.csv` 有 **24 組重疊群組、涵蓋 56 段**；對照 `splits_train_old.csv` 的 `split` 與 `fold_1..3`，**跨 partition 的群組 = 0**，fallback 未被觸發。
+- **請審查者確認：** `build_splits.py:134-140` 的 silent fallback（`allowed` 全空時退回含被禁刀口的完整候選）在什麼參數組合下會被觸發？是否該改成警告或 raise？
 
 ### T-21 test 在所有 fold 間固定不變
 - **為什麼：** final hold-out 必須穩定，否則 fold 之間不可比。`[有出處]` `data_provider/Data_Loader.py:56-60` docstring

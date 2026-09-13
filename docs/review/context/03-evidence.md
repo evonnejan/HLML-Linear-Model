@@ -56,6 +56,13 @@
 每個 window 產生固定偏移，連 persistence 都贏它。乾段更糟：anchored 砍掉約 96% 誤差後
 **仍然輸給 persistence**（模型在乾段亂動）。
 
+**✅ 污染檢查（2026-09-13）：** 該 run 的 `run_args.json` 顯示
+`input_col = HL02,HL03,HL04,HL05,HL06`——**HL01 不在 input**，符合原則 1，數字未受 OI-01 影響。
+run 訓練於 2026-05-19 17:56，anchored 計算於 2026-06-03 23:09，test windows 9,412，
+`anchor_check_ok: true`，persistence 交叉驗證 diff 1.14e-01。
+全 repo 116 個 run 中有 13 個的 `input_col` 含 HL01（10 個為 2026-05-18 的 base sweep、
+3 個為 2026-09-02/09-10 的煙霧測試），**但都不是這次 anchored 分析所用的 run**。
+
 > ⚠️ 這組數字是整個研究方向（delta-target、branch-NLinear、乾段訓練）的**唯一實證依據**。
 > 若它在新 pipeline 下不成立，roadmap 的優先順序需要重排。
 > **請審查者評估：把整條 roadmap 建立在一組未在現行條件下複現的數字上，風險有多大。**

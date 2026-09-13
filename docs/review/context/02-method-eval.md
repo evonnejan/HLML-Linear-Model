@@ -66,6 +66,11 @@ exog_cols      ──► ExogenousEncoder(GRU)  ──► context embedding [B, 
 > ⚠️ 這是 **跨 window pooled** 的相關係數，不是 per-window 或 per-event 的形狀相關。
 > 在有 level bias 的情況下，pooled corr 會被 window 之間的水位差異主導。
 > 見 `06-open-issues.md` OI-04。
+>
+> **注意：per-segment 的 corr 其實已經存在**——`exp/exp_Main2.py:696-880` 的
+> `_save_segment_metrics` 產出 `metrics_segment.csv`，每段都有 `Corr`
+> （`horizon="all"` 與 per-horizon 兩種列）。只是它沒被當成主指標，也沒有驅動 early stopping。
+> 待決的是「headline 該用哪一個」，不是「要不要新增功能」。
 
 ### 3.2 Persistence baseline
 

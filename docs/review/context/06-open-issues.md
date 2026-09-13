@@ -21,6 +21,20 @@
 - **不是這件事：** anchored / persistence 需要的 HL01 最後值走的是 `batch_y`（target 路徑），
   與 `input_col` 無關，排除 HL01 不會讓 anchored 失效（見 `02-method-eval.md` §3.3）。
   本條講的是 HL01 的**整條 `seq_len` 歷史**被當成 branch 通道。
+- **⚠️ 已做的 run 稽核（2026-09-13）：** 掃過全部 `run_args.json`，**13 個 run 的 `input_col` 是
+  `HL01,HL02,...,HL06`**（10 個在 2026-05-18 的 base sweep、3 個在 2026-09-02/09-10 的煙霧測試）；
+  其餘 97 個 run 皆不含 HL01。**關鍵的 anchored 分析（run 訓練於 2026-05-19 17:56，
+  anchored 計算於 2026-06-03 23:09）用的是 `HL02..HL06`，未受污染** ——
+  `03-evidence.md` §4 的 raw 20,884 / anchored 1,537 / persist 2,430 因此仍然有效。
+- **⚠️ 意圖不明（需使用者確認）：** `run_dlinearmix2_sweep.sh` 與 `_noHL01.sh` 的差別只有
+  `--input_col`（`HL*` vs 明列 `HL02..HL06`）與 `--seed`（無 vs 42）。有兩種解釋：
+  (A) 刻意的對照組；(B) base 版的 `HL*` 是無意的，後來才補做 noHL01。
+  傾向 (B)：base 註解只提 "3 seq_len x 2 fusion" 完全沒提 HL01、noHL01 註解特別標
+  "WITHOUT HL01 in input"、base 未設 seed 而 noHL01 有、且 5/19 之後所有 run 都改用明列欄位。
+  **但這只是推論，請審查者一併詢問/評估。**
+- **建議的修法（尚未實作）：** 偵測到 `target ∈ input_col ∪ exog_col` 時報錯並印出展開後的欄位，
+  以 `--allow_target_in_input` 明示放行——因為 `runs_sanity_seg/Linear_HL01-to-HL01` 這類
+  sanity run 是刻意要做的，不能硬性禁止。
 - **狀態：未處理。** 依「只記錄不修改」原則，本次未動任何程式碼。
 
 ### ⚠️ OI-02 sweep 腳本的 exog 與 build_splits 預設不一致
@@ -30,23 +44,41 @@
   `min_since_rain` 有 60–70 列 NaN 而 `isRain` 沒有，**兩者算出的可用 window 數會不同**
   → split 檔記錄的 `n_windows` 與訓練時 loader 實際產生的數量可能對不上，
   而「兩者一致」正是切分正確性的主要驗證方式。
+- **成因（使用者確認）：** `min_since_rain` 是後來才加的欄位，sweep 腳本沒同步更新。
+  注意 sweep 已被更新過 `--split_mode builtin`，所以是**改了一半**。
+  待改：`run_dlinearmix2_sweep.sh:26`、`_noHL01.sh:26`、`_criterion.sh:29`。
 - **狀態：未處理。**
 
-### ⚠️ OI-03 `L >= 2*buffer` 似乎沒有被程式強制
-- **現象：** 我在 `build_drycut_segments_meta.py` 找不到對應的 assert 或參數檢查。
-  下游 `build_training_csv_from_meta.py:110-134` 的 `check_no_overlap` 會擋，但那是第二道防線，
-  且可用 `--allow-overlap` 繞過。
-- **為什麼嚴重：** 這是整條防 leakage 論證鏈的第一環。使用者若給 `--l-hours 1 --buffer 60`，
-  是否會安靜產出重疊的 meta？
-- **狀態：未驗證，請審查者確認。**
+### ✅ OI-03 `L >= 2*buffer` 未被強制 —— **撤回（2026-09-13）**
+**本條為誤報。** 檢查確實存在：
 
-### ⚠️ OI-04 主指標 corr 是跨 window pooled，不是 per-event
-- **現象：** `exp/exp_Main2.py:184-221` 對每個 horizon 跨全部 window 算 Pearson。
+```python
+# build_drycut_segments_meta.py:89-92
+l_minutes = int(args.l_hours * 60)
+buf = args.buffer_minutes
+if l_minutes < 2 * buf:
+    raise ValueError(f"需要 L >= 2*buffer（L={l_minutes}m, buffer={buf}m），否則相鄰 window 會重疊。")
+```
+
+誤報成因：撰寫 context 時讀了該檔 39–58 與 95–120 行，跳過 89–94。
+**保留本條的紀錄，是為了提醒審查者：`context/` 是 Tier 1 的「宣稱」，會有錯，
+一切以 Tier 0（程式碼與資料）為準。**
+
+### ⚠️ OI-04 主指標 corr 是跨 window pooled（**已修正描述**）
+- **現象：** `exp/exp_Main2.py:184-221` 的 `vali()` 對每個 horizon **跨全部 window** 算 Pearson，
+  再對 15 個 horizon 取平均。這是驅動 early stopping 與 headline 數字的指標。
 - **為什麼可能有問題：** 已知模型有「每個 window 固定偏移」的 level bias。
-  跨 window 的 pooled corr 會被 window 之間的水位差異主導，
-  可能在段內動態學得很差時仍然給出很高的 corr。對一個**即時預警**系統而言，
-  真正重要的是單一事件內的形狀與時序，不是跨事件的水位排序能力。
-- **狀態：未處理。請審查者評估這個指標選擇在論文中是否站得住腳。**
+  跨 window 的 pooled corr 主要反映**跨事件的水位排序能力**，可能在段內動態學得差時
+  仍給出很高的 corr。對**即時預警**而言，重要的是單一事件內的形狀與時序。
+- **✅ 修正（2026-09-13）：** 原本寫「需要補 per-event corr」是錯的——
+  **per-segment corr 已經存在**：`exp/exp_Main2.py:696-880` 的 `_save_segment_metrics`
+  產出 `metrics_segment.csv`，每段都有 `Corr`，且分 `horizon="all"` 與 per-horizon 兩種列。
+- **所以真正待決的是：** 論文的 headline corr 要用「跨 window pooled」還是
+  「per-segment 取 median / worst-decile」？後者的數字已經算好躺在 `metrics_segment.csv`，
+  只是沒被當成主指標，也沒有驅動 early stopping。
+  彙總方式可直接沿用 5/20 對 MSE 已決定的四種（window-weighted / per-segment mean /
+  median / worst-decile），不會產生「太多 corr」的問題。
+- **請審查者評估：** 主指標該選哪一個？early stopping 該跟著改嗎？
 
 ### ⚠️ OI-05 `_drop_constant_columns` 自行用 70% 規則切 train
 - **現象：** `run.py:119-156` 用「前 70% 的 segment」判斷哪些欄位是常數，
@@ -55,12 +87,27 @@
   影響有限（只影響「要不要丟這一欄」的決策），但嚴格說是一種資訊洩漏。
 - **狀態：未處理。**
 
-### ⚠️ OI-06 `pick_boundary` 的 blocked fallback 可能靜默造成 leakage
-- **現象：** `build_splits.py:139-142`——當候選邊界全被 blocked（會拆散重疊群組）時，
-  程式**退回不設限**，等於允許切開重疊群組。
-- **為什麼可能有問題：** 這正是 leakage 防護要擋的情況，卻在極端情形下自動放行。
-  是否有警告輸出？
-- **狀態：未驗證，請審查者確認。**
+### ⚠️ OI-06 `pick_boundary` 的 blocked fallback 是 silent fallback（**已降級**）
+- **現象：** `build_splits.py:134-140`
+
+  ```python
+  cand = np.arange(lo, hi + 1)
+  if blocked is not None:
+      allowed = cand[~blocked[cand]]
+      if len(allowed):        # ← 只有「還剩至少一個」時才採用
+          cand = allowed
+  # allowed 全空 → cand 維持含被禁止刀口的完整清單 → 可能切開重疊群組
+  ```
+
+  當 `[lo, hi]` 內**所有**候選邊界都會拆散重疊群組時，程式**安靜退回**使用全部候選，
+  等於允許切開重疊群組——而那正是 leakage 防護要擋的事。**沒有任何警告輸出。**
+- **✅ 實測結果（2026-09-13，已降級）：** 拿 `rain_segments_meta.csv` 重算重疊群組
+  （**24 組、涵蓋 56 段**），對照 `splits_train_old.csv` 逐一檢查 `split` 與 `fold_1..3`：
+  **跨 partition 的重疊群組 = 0 → fallback 未被觸發，現行切分無 leakage。**
+- **因此這是潛在風險而非現行 bug。** 目前候選範圍寬（`[1, 157]` 共 157 個刀口，
+  僅約 24 處 blocked），不可能全被擋住；但若日後 fold 數變多、候選範圍變窄，
+  或資料重疊變密，就可能踩到——**而且踩到了也沒人會知道**。
+- **建議：** `allowed` 為空時印出明顯警告或直接 raise，而不是安靜放行。一行的事。
 
 ## B. 研究設計層面的待決問題
 
