@@ -7,9 +7,9 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-10T19:30:24+08:00
+- **Last updated:** 2026-09-13T18:02:39+08:00
 - **Current goal:** 審查機制已建置完成，**下一步是執行第一次完整 review（審查者：Codex）**，清掉 Blocker 後才啟動 36-run 實驗矩陣。
-- **Status (one line):** 資料前處理全部就緒且 0 leakage（`train_drycut_L3h_buf60.csv` 179 段/33,381 win、`train_old.csv` 159 段/31,440 win，各配 3-fold split，`--split_mode` 現為必填）；**審查機制 `docs/review/` 已全部產出並可執行**（README + context 00–06 + protocol 4 檔 + reports/TEMPLATE + slash command）。撰寫 context 過程中發現 **6 個未處理的意圖–實作疑點（OI-01~OI-06）**，依原則只記錄未修改。**尚未開始跑實驗矩陣。**
+- **Status (one line):** 資料前處理全部就緒且 0 leakage；**審查機制 `docs/review/` 已全部產出、六個疑點已逐一查證釐清，可交 Codex 執行第一次 review**。查證結果：OI-03 **撤回**（誤報，檢查存在於 `build_drycut_segments_meta.py:91-92`）、OI-06 **降級**（實測 0 leakage，fallback 未觸發）、OI-04 **修正**（per-segment corr 已存在，待決的是 headline 指標選哪個）、OI-01/02/05 維持。**關鍵 anchored 數字經稽核未受污染。尚未開始跑實驗矩陣。**
 - **Next steps:**
   1. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。啟動方式見 `docs/review/README.md`「審查者：從這裡開始」。
   2. **清掉報告中的 Blocker**，特別是 OI-01（`--input_col 'HL*'` 把 HL01 餵進模型）。
@@ -19,6 +19,7 @@
 - **Must-know handoff points:**
   - **審查機制（2026-09-10 定案，spec 見 `docs/review/2026-09-10-research-review-system-design.md`）**：核心命題是**意圖 ↔ 實作一致性**（「我宣稱要做的」vs「程式實際做的」），外加 bug／優化／方向三軸。材料分三級：**Tier 0 事實**（程式碼、`dataset/` 實際內容，唯一權威）、**Tier 1 受審宣稱**（`docs/review/context/*`）、**Tier 2 背景**（本檔、`docs/model_roadmap.md`、`meeting_recap.txt` 等）；Tier 1/2 與 Tier 0 不符即為 finding。審查者**只出報告、不改任何檔案、不得跑訓練**。
   - **順序已定案：先 review、後實驗矩陣。** 理由：矩陣約 4.2 小時且吃 `train_drycut_L3h_buf60.csv` / `splits_*.csv`，若 review 抓到資料譜系／欄位語意／leakage 層級問題，先跑的實驗整批作廢。review 報告即矩陣的 go/no-go 依據。
+  - **⚠️ run 稽核結果（2026-09-13）**：全 repo 116 個 run 中 **13 個的 `input_col` 含 HL01**（10 個為 2026-05-18 base sweep、3 個為 09-02/09-10 煙霧測試）；**但 6/3 的 anchored 分析用的是 2026-05-19 的 run，`input_col = HL02..HL06`，未受污染** → `raw 20884 / anchored 1537 / persist 2430` 仍然有效。
   - **⚠️ 已證實的意圖–實作不符（OI-01）**：`run.py:44-66` 的 glob 展開**不排除 target**，`Data_Loader:247-250` 也沒有把關（唯一驗證是 input/exog 不可互相重疊，`run.py:169-174`）。`run_dlinearmix2_sweep.sh:25` 用 `--input_col 'HL*'` + `--target HL01` → **HL01 被當成 branch input**，直接違反核心原則；而 `run_dlinearmix2_sweep_noHL01.sh:25` / `_criterion.sh:28` 用明列的 `HL02..HL06`。「noHL01」這個檔名本身即為佐證。本檔第 5 節的範例指令也用 `'HL*'`，照抄即中招。**依「只記錄不修改」原則未動程式碼**，完整記載見 `docs/review/context/06-open-issues.md`。
   - **系統定位（2026-09-02 定案）**：**即時預警系統**；虛擬水位量測是更長遠目標。此定位決定 delta-target 可行（推論時有 HL01 當下值當錨）；若日後轉向虛擬量測，roadmap #1/#4 需重新設計。
   - **核心發現**：HL01 不在 input（input=HL02–06+exog）→ 無 level 錨 → 每 window 固定偏移；persistence 因此贏 raw 模型（raw MSE 20884 / anchored 1537 / persist 2430；Corr 0.819→0.988）。**注意：此組數字產生於 2026-06-30 的舊資料、舊切分、閘門有缺陷時期，不可當現況證據——現行 pipeline 至今無任何模型結果。**
@@ -87,6 +88,22 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-13T18:02:39+08:00 — 六個疑點逐一查證：撤回 1、降級 1、修正 1，並完成 run 稽核
+- **Trigger:** 使用者逐項追問六個疑點，並質疑「anchored 應該需要用到 HL01」。
+- **What changed:** 只改 `docs/review/context/` 與本檔，**未動任何程式碼或資料**。
+- **查證結果:**
+  - **OI-03 撤回（誤報）**：`L >= 2*buffer` 的檢查**確實存在**於 `build_drycut_segments_meta.py:91-92`。誤報成因是撰寫 context 時讀了該檔 39–58 與 95–120 行，**跳過 89–94**。保留紀錄以提醒 `context/` 屬 Tier 1 宣稱、會有錯。
+  - **OI-06 降級**：實測 `rain_segments_meta.csv` 有 **24 組重疊群組、涵蓋 56 段**；對照 `splits_train_old.csv` 的 `split` 與 `fold_1..3`，**跨 partition 群組 = 0** → silent fallback 未被觸發，現行切分無 leakage。改列為潛在風險（建議 `allowed` 全空時警告或 raise）。
+  - **OI-04 修正**：**per-segment corr 已存在**（`exp/exp_Main2.py:696-880` 的 `_save_segment_metrics` → `metrics_segment.csv`，每段含 `Corr`，分 `horizon="all"` 與 per-horizon）。原本寫「需補 per-event corr」是錯的。真正待決的是 **headline 主指標要用跨 window pooled 還是 per-segment 彙總**（彙總方式可沿用 5/20 對 MSE 決定的四種）。
+  - **OI-01 維持**，並補上意圖判讀與修法建議：`sweep.sh` vs `_noHL01.sh` 只差 `--input_col`（`HL*` vs 明列）與 `--seed`（無 vs 42）。傾向「base 的 `HL*` 是無意的」（base 註解只提 seq_len×fusion、noHL01 特別標 "WITHOUT HL01"、base 未設 seed、5/19 後全改明列），**但意圖無記載，需使用者確認**。建議修法：偵測 `target ∈ input_col ∪ exog_col` 即報錯並印出展開後欄位，以 `--allow_target_in_input` 放行（因 `runs_sanity_seg/Linear_HL01-to-HL01` 是刻意的 sanity run）。
+  - **OI-02 維持**，成因確認為 `min_since_rain` 是後加欄位、sweep 只更新了 `--split_mode` 沒更新 `--exog_col`。待改：`run_dlinearmix2_sweep.sh:26`、`_noHL01.sh:26`、`_criterion.sh:29`。
+  - **OI-05 維持。**
+- **✅ run 稽核（重要）:** 掃全部 `run_args.json`——`HL02..HL06` 27 runs、`HL02,HL03` 25 runs、**`HL01,HL02..HL06` 13 runs**、單站 DLinear 45 runs。13 個含 HL01 者集中在 2026-05-18（base sweep）與 09-02/09-10（煙霧測試）。**6/3 的 anchored 分析用的是 2026-05-19 17:56 的 run，`input_col = HL02..HL06`、`criterion=huber`、`early_stop_metric=mse`、9,412 test windows、`anchor_check_ok: true` → 未受污染。**
+- **另釐清:** anchored / persistence 的 `x_last` 來自 **`batch_y`（target 路徑）**：`Data_Loader.py:277` → `507-509` → `exp_Main2.py:547` → `compute_anchored_mse.py:40-42`，完全獨立於 `batch_x`/`input_col`。把 HL01 排除在 `--input_col` 之外**不會**讓 anchored 失效。
+- **Files touched:** `docs/review/context/02-method-eval.md`、`03-evidence.md`、`05-traceability.md`、`06-open-issues.md`、`PROGRESS.md`。
+- **Commands run:** 掃 `run_args.json`、讀 `anchored_metrics.json`、讀兩支 sweep 腳本、`grep` `build_drycut_segments_meta.py` 的 buffer 檢查、以 pandas 重算重疊群組並比對 `splits_train_old.csv`。**未執行訓練、未改動程式或資料。**
+- **Follow-ups:** 交 Codex 執行第一次 review → 清 Blocker → 才跑 36-run 實驗矩陣。
 
 ### 2026-09-10T19:30:24+08:00 — 建置研究審查機制 `docs/review/`，並發現 6 個意圖–實作疑點
 - **Trigger:** 使用者指示「先幫我把會用到的東西補齊」。
@@ -368,7 +385,10 @@
 - [ ] **第一次完整 review**（審查者：Codex）→ `docs/review/reports/YYYY-MM-DD-r01/report.md`。
 - [ ] 清掉第一次 review 報告中的 Blocker。
 - [ ] **修 OI-01：`--input_col 'HL*'` 會把 HL01 餵進模型**（已證實，`run.py:44-66` 不排除 target；`run_dlinearmix2_sweep.sh:25` 實際使用）。待 review 判定嚴重度後處理。
-- [ ] 處理 OI-02 ~ OI-06（見 `docs/review/context/06-open-issues.md`）。
+- [ ] 處理 OI-02（sweep 的 `--exog_col` 仍為 `isRain`，未同步 `min_since_rain`）與 OI-05。
+- [x] 查證 OI-03（**撤回，誤報**）、OI-06（**降級**，實測 0 leakage）、OI-04（**修正**，per-segment corr 已存在）（2026-09-13）。
+- [ ] **決定 headline 主指標**：跨 window pooled corr vs per-segment 彙總（median / worst-decile）；early stopping 是否跟著改。
+- [x] 稽核全 repo run 的 `input_col`，確認 anchored 分析未受 HL01 污染（2026-09-13）。
 - [ ] 補上成功判準的數字門檻（目前僅「主指標 corr、須打敗 persistence」，無門檻）。
 - [ ] **實驗矩陣 36 runs（待第一次 review 的 Blocker 清完才啟動）**：因子驅動腳本 + anchored/non-anchored 合併總表。驅動腳本一律用 `--split_mode file --split_file ... --fold k`（`--split_mode` 現為必填，漏帶會直接報錯）。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
