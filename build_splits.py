@@ -142,10 +142,10 @@ def pick_boundary(cum: np.ndarray, total: int, target_frac: float, lo: int, hi: 
         allowed = cand[~blocked[cand]]
         if len(allowed) == 0:
             raise ValueError(
-                f"候選邊界區間 [{lo}, {hi}] 內每個位置都會拆散重疊的 segment 群組，"
-                f"無法在不造成 leakage 的前提下切分（target_frac={target_frac:.3f}）。"
-                " 請調整 --ratios / --n-folds / --init-train-frac，"
-                "或改用結構上無重疊的切分（drycut 以 L >= 2*buffer 保證無重疊）。"
+                f"Every candidate boundary in [{lo}, {hi}] would split an overlapping "
+                f"segment group; no leakage-free split exists (target_frac={target_frac:.3f}). "
+                "Adjust --ratios / --n-folds / --init-train-frac, or use a segmentation "
+                "that is structurally overlap-free (drycut guarantees L >= 2*buffer)."
             )
         cand = allowed
     target = total * target_frac

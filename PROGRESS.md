@@ -7,7 +7,7 @@
 
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
-- **Last updated:** 2026-09-13T18:18:43+08:00
+- **Last updated:** 2026-09-13T18:23:43+08:00
 - **Current goal:** 審查機制已建置完成、疑點已釐清、OI-06 已修，**下一步是執行第一次完整 review（審查者：Codex）**，清掉 Blocker 後才啟動 36-run 實驗矩陣。
 - **Status (one line):** 資料前處理全部就緒且 0 leakage；**審查機制 `docs/review/` 已全部產出、六個疑點已逐一查證釐清，可交 Codex 執行第一次 review**。查證結果：OI-03 **撤回**（誤報，檢查存在於 `build_drycut_segments_meta.py:91-92`）、OI-06 **降級**（實測 0 leakage，fallback 未觸發）、OI-04 **修正**（per-segment corr 已存在，待決的是 headline 指標選哪個）、OI-01/02/05 維持。**關鍵 anchored 數字經稽核未受污染。尚未開始跑實驗矩陣。**
 - **Next steps:**
@@ -88,6 +88,14 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-13T18:23:43+08:00 — `pick_boundary` 的 raise 訊息改為英文
+- **Trigger:** 使用者要求。
+- **What changed:** `build_splits.py:143-149` 的 `ValueError` 訊息由中文改為英文；刻意維持 4 行字串，**行號不變**（143-149），故 `docs/review/` 的所有引用不需更新。docstring 維持中文以對齊該檔其餘註解風格。
+- **Result/verification:** 重跑 `build_splits.py` 產生兩份 split，與改動前**逐位元組相同**；`grep -n "if len(allowed) == 0"` 確認仍在第 143 行。
+- **Files touched:** `build_splits.py`、`dataset/splits_*.csv`（重產，內容不變）、`PROGRESS.md`。
+- **Note:** 該檔其餘 error message 仍為中文（例如「所有 segment 的可用 window 數皆為 0」），語言目前不一致；若要全面英文化可列為後續 TODO。
+- **Follow-ups:** 無。開始第一次 Codex review。
 
 ### 2026-09-13T18:18:43+08:00 — 修掉 OI-06 的 silent fallback、新增 Block R（審查文件本身）
 - **Trigger:** 使用者指示：(1) 在 `allowed` 為空時 print 或 raise；(2) 不做 `--allow_target_in_input`；(3) 讓 Codex 一併審查 `docs/review/` 的 `.md` 是否有不合理之處。
