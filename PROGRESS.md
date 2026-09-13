@@ -89,6 +89,20 @@
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
 
+### 2026-09-14T03:10:00+08:00 — seq_len 改 60 並重產 split；清理 summary 的 smoke 列；矩陣改用獨立 output_root
+- **Trigger:** 使用者指示「seq_len 先用 60」「刪除 summary 的 smoke test 垃圾列」「這次實驗要有自己獨立的 summary」。
+- **What changed:**
+  - 以 `--seq-len 60` 重產兩份 split 檔（`need` 由 111 降為 75）。
+  - 清理 `runs/DLinearMix2/DLinearMix2_summary.csv`：刪除 10 列 `epochs<=1` 的 smoke test 列（2026-09-02／09-10／09-14 各次驗證留下的），保留 57 列正式 run（epochs 2~80，日期 2026-05-18~05-20）。已先備份到 scratchpad。
+  - 實驗矩陣決定改用 `--output_root ./experiments/matrix_runs`，**不需改任何程式碼** —— `run.py:415,417` 的 `run_dir` 與 `summary_csv` 都由 `output_root` 推導，故矩陣的 run 目錄與 summary 會自動與歷史 `runs/` 完全隔離。
+- **Result/verification（seq_len=60，exog 用讀法 A）:**
+  - drycut：train 136段/27,794win (70.1%)｜val 28/5,635 (14.2%)｜test 15/6,240 (15.7%)；總計 39,669 win（seq_len=96 時為 33,381）。fold train 69/105/136，val win 5,656/5,417/5,635。
+  - 舊法：train 116段/26,166win (70.5%)｜val 24/5,418 (14.6%)｜test 19/5,523 (14.9%)；總計 37,107 win。fold train 69/89/117，val win 5,325/5,238/5,311。
+  - 比例比 seq_len=96 時更接近 70/15/15（短的 need 讓短段也能產生 window）。
+  - 重疊防護：drycut 0 群組；舊法 24 群組（56 段）仍正確攔截。
+- **⚠️ 已知 footgun:** split 檔名不含 `seq_len`，但其 `n_windows` 與邊界是**針對特定 seq_len/exog 算出來的**。目前兩份檔皆為 `seq_len=60` + 讀法 A 的版本。若日後改 seq_len 而忘了重產，segment 指派仍有效（不會 leakage），但比例會偏離目標。
+- **Follow-ups:** 寫驅動腳本與合表器；5 個 epochs=1 的 smoke run 目錄（合計 40MB）待使用者確認是否刪除。
+
 ### 2026-09-14T02:45:00+08:00 — summary 加入 fold/split_mode/split_file；實驗矩陣因子定案（24 runs）
 - **Trigger:** 使用者指示「summary 加入 fold、split_mode、split_file」與「exog 用讀法 A」。
 - **What changed:**

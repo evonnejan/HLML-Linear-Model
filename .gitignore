@@ -44,3 +44,7 @@ sh.txt
 !.env.example
 *.pem
 *.key
+
+# 實驗矩陣：run 目錄與逐 run log 體積大且可重生；彙整後的小表格可入版控
+experiments/matrix_runs/
+experiments/logs/

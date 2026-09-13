@@ -1,0 +1,40 @@
+{
+  "checked": "2026-09-14T02:49:26+08:00",
+  "HEAD": "1c87927b5989d5c747f4250897a087c95358d0d2",
+  "initial_git_status": "",
+  "core_hashes": {
+    "run.py": "6e419ce9d25eb2314f02c1befafc410b47f2f1e2ea24c6b2c666478a9d277771",
+    "data_provider/Data_Loader.py": "bd3530349049e46671266e1a1d1aea983ffb8c6acb784eec0f3fa40b4eb08628",
+    "data_provider/Data_Factory.py": "639256123532f78d5eced63c636474d855379e945e788e69e347d414d056bac8",
+    "exp/exp_Main2.py": "d518323065a5e018031c46191ccd1fde33252a45065c30a3e7afae20f43c5c3f",
+    "utils/metrics.py": "592c57491903a19b3bc57105972fb11e1bd6cce27f361684f50b7461d8374c1b",
+    "compute_anchored_mse.py": "ae3b362db81f2b584a7fbc6f324848a6c0436f98b409567aaa12425a13d66b1a"
+  },
+  "builtin": [
+    {
+      "dataset": "old",
+      "segment_count": 159,
+      "partition_counts": {
+        "train": 111,
+        "test": 33,
+        "val": 15
+      },
+      "overlap_groups": 24,
+      "cross_partition_overlap_groups": 0,
+      "crossing_examples": []
+    },
+    {
+      "dataset": "drycut_L3h_buf60",
+      "segment_count": 179,
+      "partition_counts": {
+        "train": 125,
+        "test": 37,
+        "val": 17
+      },
+      "overlap_groups": 0,
+      "cross_partition_overlap_groups": 0,
+      "crossing_examples": []
+    }
+  ],
+  "note": "Static/core reads and synthetic builtin assignment from actual segment intervals only; no loader/model/train invocation. Full interval overlap does not quantify usable overlapping windows."
+}
