@@ -1,0 +1,69 @@
+{
+  "checked": "2026-09-14T02:53:22+08:00",
+  "HEAD": "1ce63022795f908c09cd837a36dd1b111d6c6464",
+  "seq_len": 60,
+  "pred_len": 15,
+  "input": [
+    "HL02",
+    "HL03",
+    "HL04",
+    "HL05",
+    "HL06"
+  ],
+  "datasets": [
+    {
+      "tag": "drycut_L3h_buf60",
+      "exog": [
+        "Past10Min",
+        "Past1Hr",
+        "Now",
+        "north_gate_opening_1",
+        "north_gate_opening_2",
+        "north_gate_opening_3",
+        "south_gate_opening_1",
+        "south_gate_opening_2",
+        "south_gate_opening_3"
+      ],
+      "actual_test_windows": 6240,
+      "split_n_windows": 6240,
+      "matches": true,
+      "origin_start": "2025-07-18 11:09:00",
+      "origin_end": "2025-08-03 20:24:00"
+    },
+    {
+      "tag": "old",
+      "exog": [
+        "Past10Min",
+        "Past1Hr",
+        "Now",
+        "north_gate_opening_1",
+        "north_gate_opening_2",
+        "north_gate_opening_3",
+        "south_gate_opening_1",
+        "south_gate_opening_2",
+        "south_gate_opening_3"
+      ],
+      "actual_test_windows": 5523,
+      "split_n_windows": 5523,
+      "matches": true,
+      "origin_start": "2025-07-18 11:09:00",
+      "origin_end": "2025-08-03 21:05:00"
+    }
+  ],
+  "changed_csv_from_original_review": [
+    {
+      "file": "splits_train_drycut_L3h_buf60.csv",
+      "current_sha256": "f8068e87b8a7418734d93e2322de152d260e9567883217a3d366d026e4d0d4a3",
+      "original_sha256": "c3425d162711157bd023ba120baffa3e3abc47eb06cbffe56296a130881cce3b"
+    },
+    {
+      "file": "splits_train_old.csv",
+      "current_sha256": "f89ba75c61ce8e3badfff6d0e073a1d4f7c94215e64689db58ad9403ff470b39",
+      "original_sha256": "ab754a383bc190f6a275afd048205bfa3140844ab9d0c708cf6fbc2396a649e6"
+    }
+  ],
+  "common_test_origins": 5198,
+  "drycut_only": 1042,
+  "old_only": 318,
+  "scope": "Read-only datasets/scaler construction; no model inference, training, checkpoint access, or model metric calculation. Split changes occurred outside this agent tools."
+}

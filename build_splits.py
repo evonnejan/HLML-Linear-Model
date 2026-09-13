@@ -34,6 +34,8 @@ Rolling-origin expanding-window CV:
 """
 import argparse
 import fnmatch
+import json
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -239,6 +241,36 @@ def report(meta: pd.DataFrame, n_folds: int, ratios: tuple[float, float, float])
         print("\n  每個 fold 的 val 期間皆嚴格晚於其 train 期間；train 隨 fold 擴張（expanding window）。")
 
 
+SIDECAR_KEYS = ["seq_len", "pred_len", "stride", "target", "input_col", "exog_col", "segment_col"]
+
+
+def sidecar_path(split_csv: str) -> Path:
+    return Path(split_csv).with_suffix(".json")
+
+
+def load_sidecar(split_csv: str) -> dict | None:
+    p = sidecar_path(split_csv)
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def check_sidecar(split_csv: str, **expected) -> list[str]:
+    """比對 split 檔的產生參數與現在要用的參數，回傳不一致的描述。
+
+    split 檔的 n_windows 與邊界是針對特定 seq_len/pred_len/欄位集算出來的。
+    參數對不上時 segment 指派仍有效（不會 leakage），但比例會偏離目標，
+    且 build_splits 報表上的數字與訓練實際拿到的樣本數會兜不攏。
+    """
+    meta = load_sidecar(split_csv)
+    if meta is None:
+        return [f"找不到 sidecar {sidecar_path(split_csv)}（此 split 檔可能由舊版產生，無法核對參數）"]
+    diffs = []
+    for k, want in expected.items():
+        got = meta.get(k)
+        if str(got) != str(want):
+            diffs.append(f"{k}: split 檔產生時為 {got!r}，現在要用 {want!r}")
+    return diffs
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data-path", required=True, help="訓練 CSV（需含 segment_id 與 SegmentStart）")
@@ -285,6 +317,7 @@ def main() -> None:
     # 重疊防護：window 互相重疊的 segment 必須留在同一 partition，否則共用的分鐘
     # 會同時出現在兩個 split（leakage）。drycut 因 L>=2*buffer 不會有重疊。
     blocked = None
+    groups: list[list] = []
     if {"WinStart", "WinEnd"}.issubset(df.columns):
         win = (df[[args.segment_col, "WinStart", "WinEnd"]]
                .drop_duplicates(subset=[args.segment_col]).copy())
@@ -305,8 +338,31 @@ def main() -> None:
     out = args.out or f"dataset/splits_{Path(args.data_path).stem}.csv"
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     meta.to_csv(out, index=False)
+
+    # sidecar：記下產生這份 split 的參數，供訓練前核對（見 check_sidecar）
+    side = {
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "data_path": args.data_path,
+        "seq_len": args.seq_len,
+        "pred_len": args.pred_len,
+        "stride": args.stride,
+        "target": args.target,
+        "input_col": args.input_col,
+        "exog_col": args.exog_col,
+        "segment_col": args.segment_col,
+        "ratios": list(ratios),
+        "n_folds": args.n_folds,
+        "init_train_frac": args.init_train_frac,
+        "check_cols": check_cols,
+        "n_segments": int(len(meta)),
+        "n_windows_total": int(meta["n_windows"].sum()),
+        "overlap_groups": len(groups),
+    }
+    sidecar_path(out).write_text(json.dumps(side, ensure_ascii=False, indent=2), encoding="utf-8")
+
     report(meta, args.n_folds, ratios)
     print(f"\n輸出: {out}")
+    print(f"      {sidecar_path(out)}  (產生參數，供訓練前核對)")
 
 
 if __name__ == "__main__":

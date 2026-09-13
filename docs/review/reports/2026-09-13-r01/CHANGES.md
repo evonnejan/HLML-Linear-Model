@@ -139,3 +139,35 @@
 - 本筆完成1項程式防護修復；原始統計24則（1 Blocker／17 Major／6 Minor）保留，尚未結案23則（1／16／6）。歷史HL01實驗分類仍待Q-C1；未把舊run自動改成合法或重跑。
 
 **未執行：** row停用、val設定／NaN選模政策、test分期入口、矩陣腳本、dataset／split重產及PROGRESS.md修改。這些方向與本次明確要求的target修正分開記錄。沒有訓練、模型forward、checkpoint存取、commit或push。
+
+## 006 · 評估split介面、window-wise corr與共用固定test
+
+- **記錄時間：** 2026-09-14T02:49:26+08:00（第一筆新佐證生成時）。
+- **觸發要求：** 使用者接受segment流程要求segment_col、詢問old是否需split_file，並要求保留未來row模式需求；詢問現有window-wise corr、評估分期改動量，主張val僅用於各run選checkpoint並請評估共同固定test。
+- **本輪接手狀態：** HEAD已為 `1c87927b5989d5c747f4250897a087c95358d0d2`，git status為空；前輪target防護與報告已在這個既有commit內，summary也已增加split_mode／split_file／fold。這些是本輪開始前的repo狀態，本輪沒有commit；保留已存在的其他變更。
+
+| 動作 | 檔案 | 內容／原因 |
+|---|---|---|
+| 修改 | [report.md](report.md) | 新增第5e節與頂端更新提示：切分單位與分派來源分開、split_file可選、明確保留未來row模式、old/builtin實際查核、目前沒有window-wise corr、分期與共同test的相對改動量、允許各run獨立val的共同test方案 |
+| 修改 | `CHANGES.md` | 追加006，記錄接手版本、需求調整、查核與寫入範圍；001～005保留 |
+| 新增 | `evidence/assessment_2026-09-14.json` | 記本輪初始HEAD、乾淨status、六支相關程式hash；按實際段界及現行70/10/rest規則重算builtin分派與跨partition重疊群 |
+| 新增 | `evidence/assessment_refresh_2026-09-14.json` | 同輪外部HEAD／split更新後，按60分鐘輸入、15步預測、無兩旗標只讀重驗test數量、交集與新split hash |
+| 新增 | `evidence/assessment_verification_2026-09-14.txt` | 核對外部版本變動、相關程式hash未變、原始finding正文保留、dataset只有兩份split不同及當前diff範圍；不聲稱同輪全部檔案均未變 |
+
+### 已記錄的需求與判斷
+
+- segment模式要求segment_col；未來仍需可明確選用的row模式，不再建議永久刪除row能力。分派來源可以是file或程式規則；不自動把漏填segment_col當成選擇row。C-02在未修train-only scaler前仍未結案。
+- old／drycut與file／builtin是不同軸：兩套CSV均可走現有兩種分派路徑。old builtin本次111／15／33段，24個重疊群但恰好0群跨partition；沒有誤報成目前已跨界洩漏。builtin仍缺一般性防護，固定test或更改比例後需重驗。
+- 現行主流程只有跨window的逐horizon與segment彙總corr；window-wise可由既有pred/true或points檔離線補算，不需訓練。本輪沒有新增指標實作，也沒有查看test新的性能分數。
+- 使用者定位val為各run選checkpoint用途，因此不強制old/drycut共用val；要求各run內固定完整。共同test方案可行，主要新增獨立eval資料／origin定義與train scaler注入，不需改模型架構。
+- 分期入口屬小至中型流程調整；完整共同test屬中型資料接線工作。這是靜態評估，沒有聲稱已有完整patch或保證工時。
+
+### 查核與限制
+
+- 先以 `rg`查corr呼叫、分組／axis，再讀exp_Main2、metrics、compute_anchored_mse及相關CLI／loader接線；關鍵位置存於第5e節。只為識別現有指標查看少數舊工具呼叫，沒有展開完整舊工具審查。
+- pandas只讀train CSV的segment_id、SegmentStart、WinStart、WinEnd並去重段落；按現行builtin段數比例指派，對WinStart／WinEnd排序求重疊連通群，保存群數與跨partition數。未呼叫loader、模型或訓練，未產生split。
+- 首次完整性核對在「HEAD與開始時相同」的assert中斷；查得期間出現既有工作之外的commit `1ce6302`，其訊息記seq_len改60並重產split。該commit亦納入本輪已寫的assessment.json與部分report內容；本agent沒有執行git commit，也沒有回退或覆寫該commit。
+- 重新只讀查核：六支相關程式hash仍與本輪開始相同；20個CSV中只有兩份splits_train內容與原始審查不同。使用目前split、seq_len=60／pred_len=15與無兩旗標，loader test計數6240／5523均與split計數吻合，共同5198；沒有計算模型或baseline分數。已把第5e節的評估母體數字更新並清楚標出96分鐘舊快照，避免延用過期數字。
+- 最終核對保留上述版本事件，以refresh記錄固定最新HEAD與split hash，確認程式及原始findings不變、文件連結與diff範圍；stdout存於本筆verification。未以舊HEAD的固定hash判準否定正常版本前進。
+
+**本agent本輪共修改2檔、新增3檔，均在報告資料夾。** 中途外部commit已納入其中部分內容，故最終git status不代表本輪所有寫入的完整清單；以本表為準。本agent未改核心程式、測試、dataset、PROGRESS.md或Git設定；未執行訓練、模型推論、checkpoint存取、commit、push。原始finding定級與C-01修正狀態不變。

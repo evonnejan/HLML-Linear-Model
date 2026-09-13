@@ -8,8 +8,8 @@
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
 - **Last updated:** 2026-09-13T18:23:43+08:00
-- **Current goal:** 審查機制已建置完成、疑點已釐清、OI-06 已修，**下一步是執行第一次完整 review（審查者：Codex）**，清掉 Blocker 後才啟動 36-run 實驗矩陣。
-- **Status (one line):** 資料前處理全部就緒且 0 leakage；**審查機制 `docs/review/` 已全部產出、六個疑點已逐一查證釐清，可交 Codex 執行第一次 review**。查證結果：OI-03 **撤回**（誤報，檢查存在於 `build_drycut_segments_meta.py:91-92`）、OI-06 **降級**（實測 0 leakage，fallback 未觸發）、OI-04 **修正**（per-segment corr 已存在，待決的是 headline 指標選哪個）、OI-01/02/05 維持。**關鍵 anchored 數字經稽核未受污染。尚未開始跑實驗矩陣。**
+- **Current goal:** 實驗矩陣（24 runs）的驅動腳本與合表器已完成並驗證，24 條指令已 dry-run 檢查通過。**等 review Blocker 清完即可啟動**。之後進 roadmap #1 delta-target。
+- **Status (one line):** `run_matrix.py`（manifest 驅動、可續跑、含前置檢查）與 `collect_matrix.py`（anchored 事後計算、tidy long table + fold 聚合）皆已實測通過；`experiments/manifest.csv` 已產（24 組 pending）。矩陣尚未啟動。
 - **Next steps:**
   1. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。啟動方式見 `docs/review/README.md`「審查者：從這裡開始」。
   2. **清掉報告中的 Blocker**，特別是 OI-01（`--input_col 'HL*'` 把 HL01 餵進模型）。
@@ -72,6 +72,8 @@
 - `compute_anchored_mse.py` / `list_rain_outside_segments.py` — anchored MSE 計算與降雨外 segment 分析。
 - `eval_dry.py` + `scripts/draw_eval_dry_diagrams.py` — 乾期評估與圖表。
 - `rebuild_gate_columns.py` — 以逐欄 merge_asof 就地重建 `all_minute_wide.csv` 的閘門欄（不需 SQL）；含 dry-run 與一致性檢查，會自動備份原檔為 `.gatev1.bak.csv`。
+- `run_matrix.py` — **實驗矩陣驅動**（plan/run/status；manifest 驅動、可續跑、前置檢查、--dry-run）。
+- `collect_matrix.py` — **合表器**（anchored 事後計算；results_long / summary_by_config / results_wide）。
 - `build_splits.py` — **segment-wise 時序切分 + rolling-origin expanding-window CV**。依各段可用 window 數（NaN-aware，對齊 Data_Loader）找 train/val/test 邊界，不拆段；輸出 `split` 與 `fold_k` 欄供 `run.py --split_file/--fold` 使用。
 - `build_training_csv_from_meta.py` — **meta → 訓練 CSV 組裝器**（pipeline 斷點的補丁）。任何含 segment_id/SegmentStart/SegmentEnd/WinStart/WinEnd 的 meta 皆適用；切法沿用 `Data_From_SQL_4.py:400-436`，並補做 gate 段內 ffill。
 - `analyze_dry_runs.py` / `build_drycut_segments_meta.py` / `visualize_drycut_segments.py` — 乾段反向切分法 drycut（7/2 起）：可行性統計、meta 產生（L/buffer 參數化、無 split）、切分結果檢視圖（英文、附 dry gap 標註）。
@@ -88,6 +90,24 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-14T03:20:00+08:00 — 實驗矩陣驅動腳本與合表器完成；split 加 sidecar；清除 smoke 產物
+- **Trigger:** 使用者指示「build_splits 加 sidecar」「刪除 5 個 smoke run 目錄」「寫驅動腳本+合表器並 dry-run 檢查」。
+- **What changed:**
+  - `build_splits.py`：產出 `<split>.json` sidecar（seq_len/pred_len/stride/target/input_col/exog_col/segment_col/ratios/n_folds/check_cols/統計）；新增 `check_sidecar()` 供訓練前核對。
+  - 新增 `run_matrix.py`：兩階段（plan → run）manifest 驅動。含 `preflight()`（擋 HL01 入 input、檔案存在、sidecar 參數一致）、`--dry-run`、`--only`、續跑（跳過 status=done）、失敗不中斷、每 run 寫回 manifest。
+  - 新增 `collect_matrix.py`：從 manifest 收集，逐 run × checkpoint × anchoring 產 tidy long table，並對 fold 取 mean±std。
+  - 以實驗參數（`--input-col 'HL02..HL06' --seq-len 60`）重產兩份 split 檔與 sidecar。
+  - 刪除 5 個 `epochs=1` 的 smoke run 目錄（合計 40MB）。
+- **Result/verification:**
+  - preflight 通過；`--dry-run` 產出 **24 條指令**，程式化核對 0 問題（無 HL01、data_path 與 split_file 成對、output_root 正確、皆含 `--split_mode file`、8 個 (dataset,exog,loss) 組合各 3 folds、exog=none 確實不帶 `--exog_col`）。
+  - **split 檔與 loader 的 window 數逐項吻合**（seq_len=60）：split 27,794/5,635；fold_1 16,721/5,656、fold_2 22,377/5,417、fold_3 27,794/5,635。
+  - 確認 `run.py` 砍掉常數欄 `north_gate_opening_4`（nunique=1）**不影響** window 數（其 NaN 與其他閘門欄重合）。
+  - 合表器以一個真實 run 實測：6 列（1 run × 2 ckpt × 3 anchoring），raw MSE 106,550 → anchored 4,627（corr 0.515→0.974），per-segment 統計與 `n_windows=6,240` 皆正確，且與 split 檔的 test 數一致。
+  - **內建自我檢驗：anchored 與 persistence 在 h1 的 corr 必然相同**（anchored 強制 `pred[0]=x_last`，persistence 即 `x_last`）——實測皆為 0.999407。
+- **設計要點:** manifest 存在的理由是 run_dir 名稱**不含 loss 與 fold**（僅時間戳不同），24 個目錄光看名字分不出誰是誰。anchored 放在合表器事後算（公式可改、不動訓練碼、與 `compute_anchored_mse.py` 同定義）。fold 是**重複維度非處理因子**，合表時取 mean±std，`corr_std` 與 `corr_mean` 同等重要。
+- **已知限制:** `outputs/` 只存 test 預測，無 val 的 npy，故 val 算不了 anchored；headline 看 test。
+- **Follow-ups:** 等 review Blocker 清完後 `python run_matrix.py run` 啟動（24 runs）。
 
 ### 2026-09-14T03:10:00+08:00 — seq_len 改 60 並重產 split；清理 summary 的 smoke 列；矩陣改用獨立 output_root
 - **Trigger:** 使用者指示「seq_len 先用 60」「刪除 summary 的 smoke test 垃圾列」「這次實驗要有自己獨立的 summary」。
@@ -452,7 +472,8 @@
 - [ ] **決定 headline 主指標**：跨 window pooled corr vs per-segment 彙總（median / worst-decile）；early stopping 是否跟著改。
 - [x] 稽核全 repo run 的 `input_col`，確認 anchored 分析未受 HL01 污染（2026-09-13）。
 - [ ] 補上成功判準的數字門檻（目前僅「主指標 corr、須打敗 persistence」，無門檻）。
-- [ ] **實驗矩陣 36 runs（待第一次 review 的 Blocker 清完才啟動）**：因子驅動腳本 + anchored/non-anchored 合併總表。驅動腳本一律用 `--split_mode file --split_file ... --fold k`（`--split_mode` 現為必填，漏帶會直接報錯）。
+- [x] 實驗矩陣的驅動腳本與合表器（2026-09-14，`run_matrix.py` + `collect_matrix.py`，24 條指令 dry-run 驗證通過）。
+- [ ] **啟動實驗矩陣 24 runs**（待 review Blocker 清完）：`python run_matrix.py run`。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
 - [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**

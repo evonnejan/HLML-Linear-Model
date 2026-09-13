@@ -1,0 +1,11 @@
+Checked 2026-09-14T02:55:11+08:00
+Observed HEAD advancement: 1c87927b5989d5c747f4250897a087c95358d0d2 -> 1ce63022795f908c09cd837a36dd1b111d6c6464
+Initial verification detected this advancement and stopped; this verification uses the refreshed snapshot.
+PASS: refreshed HEAD stable; all six inspected program hashes unchanged from turn start.
+PASS: 18 CSVs unchanged from review; two externally updated split CSVs match refresh hashes.
+PASS: seq_len=60/pred_len=15, no indicators: test=6240/5523, common=5198; loader counts match current splits.
+PASS: original 24 finding bodies and local Markdown links valid.
+PASS: current tracked diff limited to report folder; no staged changes; diff check passed.
+M docs/review/reports/2026-09-13-r01/CHANGES.md
+ M docs/review/reports/2026-09-13-r01/report.md
+?? docs/review/reports/2026-09-13-r01/evidence/assessment_refresh_2026-09-14.json

@@ -2,7 +2,9 @@
 
 本次新增檔案與後續修訂詳見 [變更紀錄](CHANGES.md)。
 
-**最新設計評估（2026-09-14，第三輪討論）：** 以本輪開始時已存在的HEAD `1c87927` 為基準；本輪未修改程式。第5e節更新split_file可選、未來明確row模式、window-wise corr缺口、開發／最終評估改動量，以及「各run自行用val選checkpoint、共用固定test」的可行方案。先前第5c／5d節是歷史討論，冲突時以第5e節為準。
+**最新設計評估（2026-09-14，第三輪討論）：** 以本輪開始時已存在的HEAD `1c87927` 為基準；本輪未修改程式。第5e節更新split_file可選、未來明確row模式、window-wise corr缺口、開發／最終評估改動量，以及「各run自行用val選checkpoint、共用固定test」的可行方案。先前第5c／5d節是歷史討論，衝突時以第5e節為準。
+
+**同輪版本變動：** 查核期間HEAD由其他工作進展到 `1ce6302`，兩份dataset split內容亦改變；本輪沒有執行commit或重產split。按目前split、seq_len=60／pred_len=15／無兩旗標重驗，test為drycut 6,240、old 5,523，共同5,198。先前5,700／4,839／4,521是seq_len=96與原始split的快照；不要混用。新佐證見 `evidence/assessment_refresh_2026-09-14.json`。
 
 **最新修正狀態（2026-09-14，第二輪討論）：** 已依使用者明確要求修復C-01的target輸入防護，24個不含訓練的回歸測試通過；其他修正尚未套用。暫不使用isRain／MSR的決策已取代前輪旗標提案。原始24則finding與分級是09-13審查快照；第5d節記錄修正後狀態、剩餘問題與最新設計。程式已改動，原始file:line與「核心hash未變」核對僅適用於各自當時版本。
 
@@ -693,7 +695,7 @@ Pearson分母是兩組偏離各自平均值的平方和乘積之平方根。一�
 
 ### 當前版本與工作範圍
 
-本輪開始git status為空，HEAD已是 `1c87927b5989d5c747f4250897a087c95358d0d2`，包含前輪target防護及summary新增split_mode／split_file／fold欄。這是接手時已存在的repo狀態，不是本輪執行commit。原始C-09中「summary缺fold/split」子項已由目前程式補齊，但資料內容hash／train scaler等manifest缺口仍在，不能把整則C-09視為已解決。本轮只讀程式／資料並更新報告，不執行訓練、推論、權重載入或額外功能實作。
+本輪開始git status為空，HEAD已是 `1c87927b5989d5c747f4250897a087c95358d0d2`，包含前輪target防護及summary新增split_mode／split_file／fold欄。這是接手時已存在的repo狀態，不是本輪執行commit。原始C-09中「summary缺fold/split」子項已由目前程式補齊，但資料內容hash／train scaler等manifest缺口仍在，不能把整則C-09視為已解決。本輪只讀程式／資料並更新報告，不執行訓練、推論、權重載入或額外功能實作。
 
 ### 需求更新：segment_col與未來row模式
 
@@ -701,7 +703,7 @@ Pearson分母是兩組偏離各自平均值的平方和乘積之平方根。一�
 
 split_file目前是分派來源，不是old/drycut方法名稱：`run.py:_validate_split_args`只在split_mode=file時要求檔案，builtin反而禁止同時提供split_file與fold；`Data_Loader.py`有segment_col、無split_file時依段數70/10/rest分派。old與drycut兩者都能走這兩種路徑，不能簡化成「old不用file，drycut才用」。本機已存在 `dataset/splits_train_old.csv`。
 
-本輪按現行builtin規則與實際段界重算：old為111 train／15 val／33 test段，有24個重疊群，但當前這組builtin边界恰好0群跨partition；drycut為125／17／37段、無重疊群。因此不能聲稱目前old builtin已實際跨界洩漏，也不能把「這次恰好沒跨界」當成程式有防護。更換比例或固定test時須重新檢查。佐證見 `evidence/assessment_2026-09-14.json`。
+本輪按現行builtin規則與實際段界重算：old為111 train／15 val／33 test段，有24個重疊群，但當前這組builtin邊界恰好0群跨partition；drycut為125／17／37段、無重疊群。因此不能聲稱目前old builtin已實際跨界洩漏，也不能把「這次恰好沒跨界」當成程式有防護。更換比例或固定test時須重新檢查。佐證見 `evidence/assessment_2026-09-14.json`。
 
 要不要求外部split_file仍維持可重現，可以用明確參數／時間界限計算分派，再自動保存實際ID與原始時間界限至run manifest。未來啟用row模式前需修C-02的train-only scaler，並處理連續分鐘、缺測／事件跳接、窗口邊界與既定時間隔離；不能直接把現存有bug的fallback改名當新模式。本輪只登錄需求，C-02仍未修復。
 
@@ -709,7 +711,7 @@ split_file目前是分派來源，不是old/drycut方法名稱：`run.py:_valida
 
 查過現行評估與anchored路徑：`exp_Main2.py:212-219`是逐horizon跨windows；`utils/metrics.py:8-15`沿axis0；`exp_Main2.py:745-789`是segment內所有點攤平或逐horizon跨windows；`:837-847`按segment+horizon分組，並非按window。`compute_anchored_mse.py:47-54,101-108`亦無逐window corr。repo關鍵字檢索遇到的舊visualize／exp_Main／analyze_full_inference呼叫亦為segment+horizon，未作完整歷史工具審查。
 
-希望的指標是對每個window i取pred[i,:,0]與true[i,:,0]的15個horizon算Pearson，得到每個window一個值。既有pred.npy／true.npy已足夠算分數；`segment_horizon_points.csv.gz`有window_idx、horizon、target_time、pred、true，可按window聚合並重建時間索引，不需重訓。建议先作離線診斷輸出window_id／origin／segment／corr／MSE／true_std／pred_std／valid_reason，加中位數、低分位、有效率與反向窗口比例；不可只報nanmean而隱藏平坦或失敗窗口。
+希望的指標是對每個window i取pred[i,:,0]與true[i,:,0]的15個horizon算Pearson，得到每個window一個值。既有pred.npy／true.npy已足夠算分數；`segment_horizon_points.csv.gz`有window_idx、horizon、target_time、pred、true，可按window聚合並重建時間索引，不需重訓。建議先作離線診斷輸出window_id／origin／segment／corr／MSE／true_std／pred_std／valid_reason，加中位數、低分位、有效率與反向窗口比例；不可只報nanmean而隱藏平坦或失敗窗口。
 
 Pearson只看中心化後的線性形狀，不能同時驗幅度或絕對水位，也不是動態時間對齊指標；15點少且有時間相依，先作描述性診斷，不把每window或重疊windows當獨立統計樣本。Persistence每window為常數，其window-wise corr未定義；可正常比較MSE。Anchored在同一window加常數，故其有效window-wise corr應與raw相同；若不相同，要先查公式、NaN mask或對齊，而不是宣稱anchored改善了該window形狀。本輪未計算既有test的新性能，以免把設計討論變成新的test探索。
 
@@ -728,7 +730,7 @@ Pearson只看中心化後的線性形狀，不能同時驗幅度或絕對水位�
 
 使用者已明確定位val只用於每個run選checkpoint。因此不強制old/drycut使用相同val；要求是每個run跨epoch固定且完整，並只在該run內比較其val分數。若以不同val選出的完整流程在共同test比較，結論涵蓋各自資料選樣及checkpoint選擇流程；不能再把不同val分數排成一張公平名次表。這取代前輪「建議共用rolling val界限」作為必要工作的解讀。
 
-推薦以目前drycut的test起點／原始分鐘窗口為共同評估規格，先凍結T，再於各自更早dev資料分train/val或rolling。train_old.csv缺少部分drycut窗口，現有集合交集只有4521；若要全數採drycut的5700個起點，應從共同來源提供同一份eval資料給兩種模型，而不是限制old從自己的CSV取test。另一個較省改動的方案是在各自原生test只比共同4521起點，但這改變了評估母體，不能冒充全份drycut test。
+推薦以drycut的test起點／原始分鐘窗口為共同評估規格，先凍結T，再於各自更早dev資料分train/val或rolling。train_old.csv缺少部分drycut窗口；本輪中途split更新後，以60分鐘輸入／15步預測實測test為drycut6240、old5523，共同5198。若要全數採drycut的6240個起點，應從共同來源提供同一份eval資料給兩種模型，而不是限制old從自己的CSV取test。另一個較省改動的方案是在各自原生test只比共同5198起點，但這改變了評估母體，不能冒充全份drycut test。原始96分鐘輸入的5700／4839／4521只保留作歷史快照。
 
 共用eval規格應固定origin／horizon、真值、可用原始欄位、補值及NaN規則；每個run按訓練時欄序取輸入並使用自己的train scaler，標準化後值不必相同。先保留T所需完整輸入＋未來目標時間範圍，再排除old與drycut train/val中相交或跨界的事件，保持當前研究要求的時間隔離。不能只指定同一test開始日期，也不能只複製兩份語意不同的segment ID。
 
@@ -767,7 +769,8 @@ rolling僅發生在T之前：各fold自己的train／val可以不同，但T在�
 | `split_discussion_2026-09-14.txt` | 無isRain/MSR配置下的test起點交集，以及各dataset／fold實際日期界限；只讀loader查核 |
 | `verify_target_guard_fix_2026-09-14.py` → `target_guard_fix_verification_2026-09-14.txt` | C-01授權修正後的範圍、dataset／未修改核心hash、原始findings及新測試清單核對 |
 | `assessment_2026-09-14.json` | 第三輪開始的HEAD／六支相關程式hash與乾淨工作樹；按當前builtin規則計算old/drycut實際重疊群與partition |
-| `assessment_verification_2026-09-14.txt` | 本輪僅更新報告資料夾、原始findings／程式／20個CSV未改的核對；以本輪開始HEAD為基準 |
+| `assessment_refresh_2026-09-14.json` | 偵測同輪外部HEAD／兩份split變動後，重驗60／15無旗標test計數與交集；不計算模型性能 |
+| `assessment_verification_2026-09-14.txt` | 核對同輪版本變動、六支相關程式未變、原始findings保留，以及只有兩份split不同於原始hash；不把外部修改記成本輪自行修復 |
 
 `.source.sha256`是受審程式的來源指紋，不是本次計算的CSV內容hash；本次真正CSV hash位於data.txt。read-only probes產生的stdout已保存；statistical facts與待確認意圖分列，外部背景不取代程式／dataset的權威。
 
