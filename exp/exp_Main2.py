@@ -898,7 +898,7 @@ class Exp_Main(Exp_Basic):
 
         fieldnames = [
             "time", "setting", "model", "input_col", "exog_col", "output_col",
-            "group",
+            "group", "split_mode", "split_file", "fold",
             "seq_len", "pred_len", "stride", "kernel_size",
             "flatten_fusion", "exog_emb_dim", "fusion_hidden_dim", "dropout",
             "num_params",
@@ -923,6 +923,12 @@ class Exp_Main(Exp_Basic):
             "exog_col": getattr(self.args, "exog_col", None) or "",
             "output_col": self.args.target,
             "group": str(getattr(self.args, "segment_col", "") or ""),
+            # split 身分：同一組超參數的不同 fold 只差在這三欄，缺了就無法從
+            # summary 分辨 fold 1/2/3（setting 字串不含 fold，僅時間戳不同）。
+            "split_mode": str(getattr(self.args, "split_mode", "") or ""),
+            "split_file": str(getattr(self.args, "split_file", "") or ""),
+            "fold": ("" if getattr(self.args, "fold", None) is None
+                     else int(self.args.fold)),
             "seq_len": int(self.args.seq_len),
             "pred_len": int(self.args.pred_len),
             "stride": int(self.args.stride_train),

@@ -183,6 +183,16 @@ def _drop_constant_columns(args):
     args.exog_col = ",".join(exog_cols) if exog_cols else None
 
 
+def _validate_target_inputs(args):
+    """Reject target history before any preprocessing can drop input columns."""
+    for name in ("input_col", "exog_col"):
+        if args.target in _parse_csv_cols(getattr(args, name, None)):
+            raise ValueError(
+                f"{args.model}: target={args.target!r} cannot appear in --{name}; "
+                "target history is not allowed as a model input."
+            )
+
+
 def _configure_mix_model_args(args):
     """
     Normalize channel-related args for mix-style models.
@@ -192,6 +202,7 @@ def _configure_mix_model_args(args):
     - exog_col list controls exogenous channels
     - enc_in / mix_in only carry total channel count
     """
+    _validate_target_inputs(args)
     input_cols = _parse_csv_cols(args.input_col)
     exog_cols = _parse_csv_cols(args.exog_col)
 
@@ -384,6 +395,7 @@ def main():
 
     if args.model in ('DLinearMix', 'DLinearMix2'):
         _expand_col_args(args)
+        _validate_target_inputs(args)
         _drop_constant_columns(args)
         _configure_mix_model_args(args)
 

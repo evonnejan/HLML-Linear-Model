@@ -1,0 +1,10 @@
+Checked 2026-09-13T20:08:30+08:00
+HEAD fd2903764d6e6f4f6334d2ad71048d1293d40a24
+git status --short: ?? docs/review/reports/2026-09-13-r01/
+git diff --stat: (empty)
+PASS: 24 unique findings; Blocker=1, Major=17, Minor=6, Nit=0; 33 T rows; 11 pending questions.
+PASS: every finding has required schema fields.
+PASS: 12 audited core source hashes unchanged.
+Files outside report with mtime after report birth (excluding .git and venvs): []
+PASS: no detected workspace data/code/output mutations outside report folder.
+Evidence files: audit_code.py, audit_data.py, audit_docs.py, audit_method.py, audit_supplement.py, cli_effects.txt, code.txt, commands.md, data.txt, docs.txt, method.txt, row_scaler_fixture.csv, run_inventory.json, supplement.txt

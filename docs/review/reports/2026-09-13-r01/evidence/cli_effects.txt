@@ -1,0 +1,3 @@
+drycut_L3h_buf60 after CLI constant-drop 33381 split count mismatch segments 0
+old after CLI constant-drop 31440 split count mismatch segments 0
+pred factory x_shape [1, 96, 1] scaler fitted rows 54588

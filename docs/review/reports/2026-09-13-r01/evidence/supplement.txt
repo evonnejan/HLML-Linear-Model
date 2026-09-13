@@ -1,0 +1,4 @@
+greedy_split_false_infeasible {"windows": [1, 1, 7, 1, 1, 1], "blocked": [false, false, false, false, true, true, false], "result": "Every candidate boundary in [4, 5] would split an overlapping segment group; no leakage-free split exists (target_frac=0.850). Adjust --ratios / --n-folds / --init-train-frac, or use a segmentation that is structurally overlap-free (drycut guarantees L >= 2*buffer).", "safe_alternative_boundaries": [2, 3], "safe_partition_windows": [2, 7, 3]}
+stale_values_reach_valid_model_inputs {"tag": "drycut_L3h_buf60", "windows_with_age_gt5_input": 1521, "max_age_lower_bound_in_input": 559.0, "sampled_label_anchors_correct": true}
+stale_values_reach_valid_model_inputs {"tag": "old", "windows_with_age_gt5_input": 1096, "max_age_lower_bound_in_input": 90.0, "sampled_label_anchors_correct": true}
+No training; no model checkpoint or output directory was accessed for writing.

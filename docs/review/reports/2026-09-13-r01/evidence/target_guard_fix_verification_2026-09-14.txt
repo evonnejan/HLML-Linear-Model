@@ -1,0 +1,69 @@
+Checked 2026-09-14T02:25:26+08:00
+PASS: exactly two audited core files changed; ten others match the original hashes.
+PASS: all 20 dataset CSV hashes unchanged (streaming verification).
+PASS: original 24 finding bodies, 33 T rows, 11 historical questions and 15 evidence files preserved.
+PASS: targeted regression run reports 24 passing cases.
+PASS: scope, no staged changes, CRLF-aware diff check, and original newline formats.
+ M data_provider/Data_Loader.py
+ M run.py
+?? docs/review/reports/2026-09-13-r01/
+?? tests/test_target_input_guard.py
+Current source hashes {"data_provider/Data_Loader.py": "bd3530349049e46671266e1a1d1aea983ffb8c6acb784eec0f3fa40b4eb08628", "run.py": "6e419ce9d25eb2314f02c1befafc410b47f2f1e2ea24c6b2c666478a9d277771", "tests/test_target_input_guard.py": "6adcb04a693daaa32107a6242ae2f366f92bbc1f0642cf1d6f5b12c4fbc37747"}
+Tracked patch follows (new test is separately stored at tests/test_target_input_guard.py):
+diff --git a/data_provider/Data_Loader.py b/data_provider/Data_Loader.py
+index e44e6d1..fbd18a1 100644
+--- a/data_provider/Data_Loader.py
++++ b/data_provider/Data_Loader.py
+@@ -49,6 +49,13 @@ class Dataset_Custom(Dataset):
+ 
+         self.root_path = root_path
+         self.data_path = data_path
++        if self.model_name in MIX_STYLE_MODELS:
++            for name in ("input_col", "exog_col"):
++                if self.target in self._parse_col_spec(getattr(self, name)):
++                    raise ValueError(
++                        f"{self.model_name}: target={self.target!r} cannot appear in {name}; "
++                        "target history is not allowed as a model input."
++                    )
+         self.__read_data__()
+ 
+     def _load_split_file(self, seg_col, seg_ids_sorted):
+diff --git a/run.py b/run.py
+index b9d274b..24f3e16 100644
+--- a/run.py
++++ b/run.py
+@@ -183,6 +183,16 @@ def _drop_constant_columns(args):
+     args.exog_col = ",".join(exog_cols) if exog_cols else None
+ 
+ 
++def _validate_target_inputs(args):
++    """Reject target history before any preprocessing can drop input columns."""
++    for name in ("input_col", "exog_col"):
++        if args.target in _parse_csv_cols(getattr(args, name, None)):
++            raise ValueError(
++                f"{args.model}: target={args.target!r} cannot appear in --{name}; "
++                "target history is not allowed as a model input."
++            )
++
++
+ def _configure_mix_model_args(args):
+     """
+     Normalize channel-related args for mix-style models.
+@@ -192,6 +202,7 @@ def _configure_mix_model_args(args):
+     - exog_col list controls exogenous channels
+     - enc_in / mix_in only carry total channel count
+     """
++    _validate_target_inputs(args)
+     input_cols = _parse_csv_cols(args.input_col)
+     exog_cols = _parse_csv_cols(args.exog_col)
+ 
+@@ -384,6 +395,7 @@ def main():
+ 
+     if args.model in ('DLinearMix', 'DLinearMix2'):
+         _expand_col_args(args)
++        _validate_target_inputs(args)
+         _drop_constant_columns(args)
+         _configure_mix_model_args(args)
+ 
+
+PASS: no training, model forward, checkpoint access, commit, or push in this verification.

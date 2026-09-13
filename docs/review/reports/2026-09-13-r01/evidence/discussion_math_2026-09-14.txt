@@ -1,0 +1,3 @@
+{"each_event_corr": [-1.0, -1.0, -1.0, -1.0, -1.0], "pooled_corr": 0.9999667505527721, "var_level": 2000000.0, "var_change": 33.25, "formula_result": 0.9999667505527721}
+{"within_forecast_raw_corr": -0.9922778767136677, "within_forecast_anchored_corr": -0.9922778767136677, "anchored_first_step_equals_current_observation": true}
+PASS: arithmetic only; synthetic examples are not measured model performance.

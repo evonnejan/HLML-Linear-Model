@@ -1,0 +1,178 @@
+{
+  "scope": "Read-only, no training; no isRain/MSR, raw rain/gates retained; dates are segment row spans, not first/last forecast origins.",
+  "datasets": [
+    {
+      "dataset": "train_drycut_L3h_buf60.csv",
+      "exog": [
+        "Past10Min",
+        "Past1Hr",
+        "Now",
+        "north_gate_opening_1",
+        "north_gate_opening_2",
+        "north_gate_opening_3",
+        "south_gate_opening_1",
+        "south_gate_opening_2",
+        "south_gate_opening_3"
+      ],
+      "blocks": {
+        "split": {
+          "train": {
+            "rows_start": "2024-08-14 15:50:00",
+            "rows_end": "2025-05-15 01:19:00",
+            "segments": 137
+          },
+          "val": {
+            "rows_start": "2025-05-15 19:30:00",
+            "rows_end": "2025-07-11 05:59:00",
+            "segments": 27
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 20:39:00",
+            "segments": 15
+          }
+        },
+        "fold_1": {
+          "train": {
+            "rows_start": "2024-08-14 15:50:00",
+            "rows_end": "2024-12-24 09:59:00",
+            "segments": 66
+          },
+          "val": {
+            "rows_start": "2024-12-24 11:10:00",
+            "rows_end": "2025-03-05 11:09:00",
+            "segments": 38
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 20:39:00",
+            "segments": 15
+          }
+        },
+        "fold_2": {
+          "train": {
+            "rows_start": "2024-08-14 15:50:00",
+            "rows_end": "2025-03-05 11:09:00",
+            "segments": 104
+          },
+          "val": {
+            "rows_start": "2025-03-06 06:40:00",
+            "rows_end": "2025-05-11 18:09:00",
+            "segments": 32
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 20:39:00",
+            "segments": 15
+          }
+        },
+        "fold_3": {
+          "train": {
+            "rows_start": "2024-08-14 15:50:00",
+            "rows_end": "2025-05-11 18:09:00",
+            "segments": 136
+          },
+          "val": {
+            "rows_start": "2025-05-14 15:10:00",
+            "rows_end": "2025-07-11 05:59:00",
+            "segments": 28
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 20:39:00",
+            "segments": 15
+          }
+        }
+      },
+      "no_indicator_test_count": 5700
+    },
+    {
+      "dataset": "train_old.csv",
+      "exog": [
+        "Past10Min",
+        "Past1Hr",
+        "Now",
+        "north_gate_opening_1",
+        "north_gate_opening_2",
+        "north_gate_opening_3",
+        "south_gate_opening_1",
+        "south_gate_opening_2",
+        "south_gate_opening_3"
+      ],
+      "blocks": {
+        "split": {
+          "train": {
+            "rows_start": "2024-08-14 15:40:00",
+            "rows_end": "2025-05-15 02:00:00",
+            "segments": 116
+          },
+          "val": {
+            "rows_start": "2025-05-15 19:30:00",
+            "rows_end": "2025-07-09 18:20:00",
+            "segments": 24
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 21:20:00",
+            "segments": 19
+          }
+        },
+        "fold_1": {
+          "train": {
+            "rows_start": "2024-08-14 15:40:00",
+            "rows_end": "2025-01-15 04:00:00",
+            "segments": 69
+          },
+          "val": {
+            "rows_start": "2025-01-15 05:10:00",
+            "rows_end": "2025-03-15 16:30:00",
+            "segments": 20
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 21:20:00",
+            "segments": 19
+          }
+        },
+        "fold_2": {
+          "train": {
+            "rows_start": "2024-08-14 15:40:00",
+            "rows_end": "2025-03-15 16:30:00",
+            "segments": 89
+          },
+          "val": {
+            "rows_start": "2025-03-16 00:30:00",
+            "rows_end": "2025-05-15 22:30:00",
+            "segments": 28
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 21:20:00",
+            "segments": 19
+          }
+        },
+        "fold_3": {
+          "train": {
+            "rows_start": "2024-08-14 15:40:00",
+            "rows_end": "2025-05-15 22:30:00",
+            "segments": 117
+          },
+          "val": {
+            "rows_start": "2025-05-16 21:40:00",
+            "rows_end": "2025-07-09 18:20:00",
+            "segments": 23
+          },
+          "test": {
+            "rows_start": "2025-07-18 10:10:00",
+            "rows_end": "2025-08-03 21:20:00",
+            "segments": 19
+          }
+        }
+      },
+      "no_indicator_test_count": 4839
+    }
+  ],
+  "common_test_origins": 4521,
+  "drycut_only": 1179,
+  "old_only": 318
+}

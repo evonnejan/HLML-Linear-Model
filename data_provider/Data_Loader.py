@@ -49,6 +49,13 @@ class Dataset_Custom(Dataset):
 
         self.root_path = root_path
         self.data_path = data_path
+        if self.model_name in MIX_STYLE_MODELS:
+            for name in ("input_col", "exog_col"):
+                if self.target in self._parse_col_spec(getattr(self, name)):
+                    raise ValueError(
+                        f"{self.model_name}: target={self.target!r} cannot appear in {name}; "
+                        "target history is not allowed as a model input."
+                    )
         self.__read_data__()
 
     def _load_split_file(self, seg_col, seg_ids_sorted):

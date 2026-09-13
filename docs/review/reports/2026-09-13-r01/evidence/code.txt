@@ -1,0 +1,51 @@
+target_guard {"input": "HL01,HL02,HL03,HL04,HL05,HL06", "target": "HL01", "accepted": true}
+split_regenerate {"tag": "drycut_L3h_buf60", "byte_equal": true}
+constant_selector {"tag": "drycut_L3h_buf60", "fold": null, "extraneous_segments": 0, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "drycut_L3h_buf60", "fold": null, "flag": "train", "actual": 23551, "expected": 23551, "match": true, "scaler_y_mean": 567.9365877944606, "actual_train_mean": 567.9365877944606, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": null, "flag": "val", "actual": 4130, "expected": 4130, "match": true, "scaler_y_mean": 567.9365877944606, "actual_train_mean": 567.9365877944606, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": null, "flag": "test", "actual": 5700, "expected": 5700, "match": true, "scaler_y_mean": 567.9365877944606, "actual_train_mean": 567.9365877944606, "mean_match": true, "bool_cols": []}
+constant_selector {"tag": "drycut_L3h_buf60", "fold": 1, "extraneous_segments": 59, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "drycut_L3h_buf60", "fold": 1, "flag": "train", "actual": 14119, "expected": 14119, "match": true, "scaler_y_mean": 671.5926758452749, "actual_train_mean": 671.5926758452749, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": 1, "flag": "val", "actual": 4294, "expected": 4294, "match": true, "scaler_y_mean": 671.5926758452749, "actual_train_mean": 671.5926758452749, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": 1, "flag": "test", "actual": 5700, "expected": 5700, "match": true, "scaler_y_mean": 671.5926758452749, "actual_train_mean": 671.5926758452749, "mean_match": true, "bool_cols": []}
+constant_selector {"tag": "drycut_L3h_buf60", "fold": 2, "extraneous_segments": 21, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "drycut_L3h_buf60", "fold": 2, "flag": "train", "actual": 18413, "expected": 18413, "match": true, "scaler_y_mean": 601.8350257198209, "actual_train_mean": 601.8350257198209, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": 2, "flag": "val", "actual": 4641, "expected": 4641, "match": true, "scaler_y_mean": 601.8350257198209, "actual_train_mean": 601.8350257198209, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": 2, "flag": "test", "actual": 5700, "expected": 5700, "match": true, "scaler_y_mean": 601.8350257198209, "actual_train_mean": 601.8350257198209, "mean_match": true, "bool_cols": []}
+constant_selector {"tag": "drycut_L3h_buf60", "fold": 3, "extraneous_segments": 0, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "drycut_L3h_buf60", "fold": 3, "flag": "train", "actual": 23054, "expected": 23054, "match": true, "scaler_y_mean": 569.5340824368942, "actual_train_mean": 569.5340824368942, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": 3, "flag": "val", "actual": 4627, "expected": 4627, "match": true, "scaler_y_mean": 569.5340824368942, "actual_train_mean": 569.5340824368942, "mean_match": true, "bool_cols": []}
+loader {"tag": "drycut_L3h_buf60", "fold": 3, "flag": "test", "actual": 5700, "expected": 5700, "match": true, "scaler_y_mean": 569.5340824368942, "actual_train_mean": 569.5340824368942, "mean_match": true, "bool_cols": []}
+val_sampling {"tag": "drycut_L3h_buf60", "samples": 4294, "delivered": 4288, "dropped": 6, "drop_last": true, "sampler": "RandomSampler", "omitted_set_changes": true}
+split_regenerate {"tag": "old", "byte_equal": true}
+constant_selector {"tag": "old", "fold": null, "extraneous_segments": 0, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "old", "fold": null, "flag": "train", "actual": 22047, "expected": 22047, "match": true, "scaler_y_mean": 589.1962446476102, "actual_train_mean": 589.1962446476102, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": null, "flag": "val", "actual": 4554, "expected": 4554, "match": true, "scaler_y_mean": 589.1962446476102, "actual_train_mean": 589.1962446476102, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": null, "flag": "test", "actual": 4839, "expected": 4839, "match": true, "scaler_y_mean": 589.1962446476102, "actual_train_mean": 589.1962446476102, "mean_match": true, "bool_cols": []}
+constant_selector {"tag": "old", "fold": 1, "extraneous_segments": 42, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "old", "fold": 1, "flag": "train", "actual": 13211, "expected": 13211, "match": true, "scaler_y_mean": 685.8584565018535, "actual_train_mean": 685.8584565018535, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": 1, "flag": "val", "actual": 4569, "expected": 4569, "match": true, "scaler_y_mean": 685.8584565018535, "actual_train_mean": 685.8584565018535, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": 1, "flag": "test", "actual": 4839, "expected": 4839, "match": true, "scaler_y_mean": 685.8584565018535, "actual_train_mean": 685.8584565018535, "mean_match": true, "bool_cols": []}
+constant_selector {"tag": "old", "fold": 2, "extraneous_segments": 22, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "old", "fold": 2, "flag": "train", "actual": 17780, "expected": 17780, "match": true, "scaler_y_mean": 625.4173598553346, "actual_train_mean": 625.4173598553346, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": 2, "flag": "val", "actual": 4338, "expected": 4338, "match": true, "scaler_y_mean": 625.4173598553346, "actual_train_mean": 625.4173598553346, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": 2, "flag": "test", "actual": 4839, "expected": 4839, "match": true, "scaler_y_mean": 625.4173598553346, "actual_train_mean": 625.4173598553346, "mean_match": true, "bool_cols": []}
+constant_selector {"tag": "old", "fold": 3, "extraneous_segments": 0, "actual_constants": ["north_gate_opening_4"], "legacy_constants": ["north_gate_opening_4"]}
+loader {"tag": "old", "fold": 3, "flag": "train", "actual": 22118, "expected": 22118, "match": true, "scaler_y_mean": 588.0337890343934, "actual_train_mean": 588.0337890343934, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": 3, "flag": "val", "actual": 4483, "expected": 4483, "match": true, "scaler_y_mean": 588.0337890343934, "actual_train_mean": 588.0337890343934, "mean_match": true, "bool_cols": []}
+loader {"tag": "old", "fold": 3, "flag": "test", "actual": 4839, "expected": 4839, "match": true, "scaler_y_mean": 588.0337890343934, "actual_train_mean": 588.0337890343934, "mean_match": true, "bool_cols": []}
+val_sampling {"tag": "old", "samples": 4569, "delivered": 4544, "dropped": 25, "drop_last": true, "sampler": "RandomSampler", "omitted_set_changes": true}
+row_scaler_leak {"train_rows": 14, "true_train_mean": 0, "fitted_mean": [30.0], "n_samples_seen": 20}
+boundary_exact_need [{"segment_id": 1, "SegmentStart": "2025-01-01 00:00:00", "n_rows": 111, "n_windows": 1}]
+boundary_probe {"case": "all_blocked", "result": "ValueError: Every candidate boundary in [1, 2] would split an overlapping segment group; no leakage-free split exists (target_frac=0.500). Adjust --ratios / --n-folds / --init-train-frac, or use a segmentation that is structurally overlap-free (drycut guarantees L >= 2*buffer)."}
+boundary_probe {"case": "single_blocked", "result": "ValueError: Every candidate boundary in [1, 1] would split an overlapping segment group; no leakage-free split exists (target_frac=0.500). Adjust --ratios / --n-folds / --init-train-frac, or use a segmentation that is structurally overlap-free (drycut guarantees L >= 2*buffer)."}
+empty_eval_partition [{"segment_id": 1, "n_windows": 10, "split": "train"}, {"segment_id": 2, "n_windows": 0, "split": "val"}, {"segment_id": 3, "n_windows": 0, "split": "test"}]
+model_shape {"flatten": false, "exog_in": 0, "shape": [2, 15, 1], "finite": true}
+model_shape {"flatten": false, "exog_in": 2, "shape": [2, 15, 1], "finite": true}
+model_shape {"flatten": true, "exog_in": 0, "shape": [2, 15, 1], "finite": true}
+model_shape {"flatten": true, "exog_in": 2, "shape": [2, 15, 1], "finite": true}
+corr_zero_variance {"vali": {"mse": 1.75, "mae": 0.75, "corr": 1.0}, "test_corr_per_horizon": [1.0, 0.0], "test_corr_mean": 0.5}
+merge_equivalence {"same": true, "age5_valid": true, "age6_nan": true}
+db_config_redacted {"names": ["DB_USER"], "line": 38, "literal_string": false, "reads_environment": true}
+db_config_redacted {"names": ["DB_PASSWORD"], "line": 39, "literal_string": false, "reads_environment": true}
+PASS: audit finished without calling train, test, run.py main, or checkpoint methods.

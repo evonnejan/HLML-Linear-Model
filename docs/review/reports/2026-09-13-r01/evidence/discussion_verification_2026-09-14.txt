@@ -1,0 +1,10 @@
+checked "2026-09-14T01:52:09+08:00"
+original_evidence {"unchanged": 15}
+core_hashes {"unchanged": 12}
+dataset_hashes {"unchanged": 20, "method": "streaming 1 MiB chunks"}
+report_schema {"findings": 24, "unchanged_finding_bodies": true, "severity": {"Major": 17, "Blocker": 1, "Minor": 6}, "T_rows": 33, "pending_questions": 11, "claims_D_C_M_R": [8, 8, 7, 7]}
+Traceback (most recent call last):
+  File "/Users/zkc/Desktop/HLML/Linear/docs/review/reports/2026-09-13-r01/evidence/audit_completeness.py", line 78, in <module>
+    assert (ROOT / target.split("#", 1)[0]).exists(), target
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+AssertionError: evidence/discussion_verification_2026-09-14.txt

@@ -89,6 +89,26 @@
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
 
+### 2026-09-14T02:45:00+08:00 — summary 加入 fold/split_mode/split_file；實驗矩陣因子定案（24 runs）
+- **Trigger:** 使用者指示「summary 加入 fold、split_mode、split_file」與「exog 用讀法 A」。
+- **What changed:**
+  - `exp/exp_Main2.py`：summary CSV schema 新增 `split_mode`/`split_file`/`fold` 三欄（置於 `group` 之後）。既有的 schema 遷移邏輯會把舊列補空值。
+  - 以實驗實際要用的 exog 欄位重產兩份 split 檔（原本用的是含 `min_since_rain` 的預設欄位集）。
+- **Why:** 同一組超參數的 fold 1/2/3 在 summary 裡原本**完全無法分辨**——`setting` 字串不含 fold，只有時間戳不同。缺這三欄則 summary 無法單獨用於分析，也不符合 review 機制的 traceability 要求。
+- **Files touched:** `exp/exp_Main2.py`、`dataset/splits_train_drycut_L3h_buf60.csv`、`dataset/splits_train_old.csv`。
+- **Result/verification:**
+  - 新欄位落在第 8/9/10 欄；新 run 正確寫入 `file` / `dataset/splits_...csv` / `2`；**既有 63 列補空值且未錯位**。
+  - `exog=none` 路徑實測可跑（`exog_in=0`、`exog_cols=[]`），端到端完成。
+  - 重產 split 後 segment 指派幾乎不變：drycut 完全相同（137/27/15、fold segs 66/104/136）；舊法 fold_1 的 val 由 20 段微調為 19 段。window 數差約 60（`min_since_rain` 的 NaN 列）。
+- **實驗矩陣因子定案（24 runs，約 2.8 小時）:**
+  - dataset(2)：drycut / 舊法 —— `data_path` 與 `split_file` 必須成對
+  - exog(2)：`none` / `Past10Min,Past1Hr,Now,*gate_opening*`（**讀法 A：不含 isRain 與 min_since_rain**）
+  - loss(2)：mse / huber
+  - fold(3)：1/2/3 —— **是重複維度不是處理因子**，合表時對其取 mean±std，不做 fold 間比較
+  - seed 固定 42；`input_col` **明列 HL02–06**（不可用 `HL*`，見 OI-01）
+- **已知限制（設計上接受）:** split 檔的 `n_windows` 是以某一組欄位算出的；不同 exog 設定下實際 window 數會略有出入（例如 exog=none 時 fold_1 train 為 14,369 而非 14,179）。**segment 指派固定不變**才是跨設定可比的關鍵，比例本就是 approximate。
+- **Follow-ups:** 寫驅動腳本與合表器；矩陣仍待 review Blocker 清完才啟動（使用者表示會處理）。
+
 ### 2026-09-13T18:23:43+08:00 — `pick_boundary` 的 raise 訊息改為英文
 - **Trigger:** 使用者要求。
 - **What changed:** `build_splits.py:143-149` 的 `ValueError` 訊息由中文改為英文；刻意維持 4 行字串，**行號不變**（143-149），故 `docs/review/` 的所有引用不需更新。docstring 維持中文以對齊該檔其餘註解風格。
