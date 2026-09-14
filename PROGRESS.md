@@ -8,8 +8,8 @@
 ## 0. Snapshot (rewritten each update / 每次覆寫)
 
 - **Last updated:** 2026-09-13T18:23:43+08:00
-- **Current goal:** 實驗矩陣（24 runs）的驅動腳本與合表器已完成並驗證，24 條指令已 dry-run 檢查通過。**等 review Blocker 清完即可啟動**。之後進 roadmap #1 delta-target。
-- **Status (one line):** 依 review 修完 6 項缺陷（含 1 個 blocker）：manifest 型別/原子寫入、plan 凍結 + 逐 run config_hash、sidecar 三層身份核對、corr 有效步數、收集端三方交叉核對、完整性格線。`run_matrix.py`/`collect_matrix.py`/`build_splits.py` 皆已實測。矩陣尚未啟動。
+- **Current goal:** 實驗矩陣 24 runs 已完成並驗證。關鍵發現：模型嚴重資料不足（improve% 隨 fold 訓練量單調上升，fold3 在 8/8 組皆勝過 persistence）。下一步是消化結論並進 roadmap #1 delta-target。
+- **Status (one line):** 24/24 完成、0 失敗、28.4 分鐘；參數逐項核對 0 不符；合表 144/144 筆無缺漏重複。level-bias 在新設定下重現（anchoring 使 MSE 降 5–20 倍）。
 - **Next steps:**
   1. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。啟動方式見 `docs/review/README.md`「審查者：從這裡開始」。
   2. **清掉報告中的 Blocker**，特別是 OI-01（`--input_col 'HL*'` 把 HL01 餵進模型）。
@@ -90,6 +90,42 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-14T05:30:00+08:00 — 實驗矩陣 24 runs 完成；發現模型資料不足為主導因素
+- **Trigger:** 使用者指示開跑，並要求確保「設定正確、過程正確、結果合理」。
+- **執行:** `python run_matrix.py run` → 24/24 完成、**0 失敗**、總計 **28.4 分鐘**（單組 24–152 秒；exog=full 約為 none 的 3 倍，因 GRU）。
+- **設定驗證（逐項比對 plan.json vs run_args.json）:**
+  - 24 組 × 17 個參數（criterion/fold/seed/seq_len/pred_len/target/input_col/lr/epochs/batch/dropout/early_stop/data_path/split_file/huber_beta/kernel/lradj）→ **0 項不符**。
+  - `input_cols` 全為 HL02–06，**無任何 run 含 HL01**（OI-01 防線有效）；`branch_in` 全為 5。
+  - **`exog_in` 兩資料集相同**（full=9、none=0）→ dataset 比較確實只有切分規則一個變因。
+- **過程驗證:** 早停在 **24/24 都正確選到 val corr 的最大值**（best_ep 與 argmax 完全一致）。但 **best epoch 落在 1–7（上限 80）**，模型在前幾個 epoch 就見頂後 val corr 即下滑；無任何一組跑滿 80。
+- **結果驗證:**
+  - **level-bias 在新設定下完整重現**：raw MSE 31,764–106,551 → anchored 1,772–22,991（**降 5–20 倍**）；corr 0.52–0.81 → 0.91–0.99。與歷史發現（raw 20,884 → anchored 1,537、corr 0.819→0.988）**型態一致**，且這次確定 HL01 不在 input。
+  - persistence MSE 在同一資料集的三折完全相同（drycut 2,664.2 / old 2,989.2）→ test 集固定，正確。
+  - **跨資料集的絕對 MSE 不可直接比**：drycut test 6,240 windows、old 5,523，test 段本就不同（15 vs 19 段）。公平的量是 improve%。
+- **⚠️ 主要發現：模型資料不足，而非方法優劣主導結果**
+  - improve%（相對 persistence）隨 fold 的訓練量**單調上升，8/8 組無例外**：
+    | config | fold1 (≈16k win) | fold2 (≈21k) | fold3 (≈27k) |
+    |---|---|---|---|
+    | drycut/full/huber | -248.2 | -30.5 | **+24.4** |
+    | drycut/full/mse | -167.0 | -38.8 | **+21.3** |
+    | drycut/none/huber | -120.5 | -23.2 | **+20.6** |
+    | drycut/none/mse | -73.7 | -28.2 | **+9.4** |
+    | old/full/huber | -328.8 | +23.5 | **+40.1** |
+    | old/full/mse | -205.3 | -26.2 | **+40.7** |
+    | old/none/huber | -487.1 | -88.6 | **+32.8** |
+    | old/none/mse | -669.1 | -186.7 | **+17.8** |
+  - **fold3 在 8/8 組皆勝過 persistence（+9.4% ~ +40.7%）**。主表「全部輸給 persistence」的平均值是被資料最少的 fold1 拖垮的。
+  - val corr 的 best 值也隨 fold 上升（fold1 0.68–0.78 → fold3 0.96–0.98）。
+- **初步比較（但見下方保留）:**
+  - exog=none 時 **drycut 明顯優於舊法**（anchored MSE 3,486 vs 11,339）；exog=full 時兩者接近（4,303 vs 4,891）。
+  - drycut 上 exog=none 略優於 full；舊法上則 full 遠優於 none。
+- **保留與限制:**
+  1. 所有模型僅有效訓練 1–7 個 epoch，比較的是「幾乎沒訓練的模型」，結論不宜過度解讀。
+  2. rolling-origin expanding window 使三折的訓練量差 40%，對三折取平均等於混合了差異極大的訓練régime；`corr_std`/`improve_std` 極大（improve_std 41–353）正反映此事。
+  3. 本批 corr 採「常數 horizon 記 NaN 並排除」（`eval_version=v1-corr-skip-constant`, code hash `2569904e`），不得與 `utils.metrics.CORR` 的數字混用。
+- **Files touched:** `experiments/{plan.json,manifest.csv}`、`experiments/results/*.csv`（新增）、`experiments/matrix_runs/`（gitignored）。
+- **Follow-ups:** 決定是否先處理「訓練不足」（lr/early stopping 策略）再做 roadmap #1；或直接進 delta-target 看能否改善 level-bias。
 
 ### 2026-09-14T04:30:00+08:00 — 依 review 修正實驗矩陣的 6 項缺陷（含 1 blocker）
 - **Trigger:** 外部 review 指出 6 項問題並對我提的修法再做更正；使用者要求逐項查證後實作。
@@ -497,7 +533,9 @@
 - [x] 稽核全 repo run 的 `input_col`，確認 anchored 分析未受 HL01 污染（2026-09-13）。
 - [ ] 補上成功判準的數字門檻（目前僅「主指標 corr、須打敗 persistence」，無門檻）。
 - [x] 實驗矩陣的驅動腳本與合表器（2026-09-14，`run_matrix.py` + `collect_matrix.py`，24 條指令 dry-run 驗證通過）。
-- [ ] **啟動實驗矩陣 24 runs**（待 review Blocker 清完）：`python run_matrix.py run`。
+- [x] 啟動並完成實驗矩陣 24 runs（2026-09-14，0 失敗，28.4 分鐘，設定/過程/結果三層驗證通過）。
+- [ ] **處理訓練不足**：best epoch 僅 1–7/80，val corr 見頂即下滑（檢查 lr / warmup / early-stop 準則）。
+- [ ] 決定是否重跑矩陣於「訓練充分」的設定下，再定 drycut vs 舊法的結論。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
 - [ ] **模型改進 roadmap（依序，完整版見 `docs/model_roadmap.md`）：**

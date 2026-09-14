@@ -1,0 +1,11 @@
+,,,corr,corr,corr,mse,mse,mse,eval_version,eval_code_hash
+fold,,,1,2,3,1,2,3,,
+dataset,exog,loss,,,,,,,,
+drycut,full,huber,0.9656,0.9821,0.9885,9276.3135,3475.7156,2014.1605,v1-corr-skip-constant,2569904e
+drycut,full,mse,0.97,0.9806,0.9877,7114.0337,3697.3252,2096.2415,v1-corr-skip-constant,2569904e
+drycut,none,huber,0.9763,0.9829,0.9869,5873.9927,3282.03,2115.9678,v1-corr-skip-constant,2569904e
+drycut,none,mse,0.9739,0.9827,0.9861,4627.7349,3416.3706,2413.4963,v1-corr-skip-constant,2569904e
+old,full,huber,0.9615,0.9865,0.9887,12816.9873,2287.8904,1791.8636,v1-corr-skip-constant,2569904e
+old,full,mse,0.9695,0.9824,0.9893,9127.3184,3772.9258,1772.2639,v1-corr-skip-constant,2569904e
+old,none,huber,0.9271,0.9759,0.9876,17549.752,5636.2778,2008.3887,v1-corr-skip-constant,2569904e
+old,none,mse,0.9067,0.9671,0.9863,22990.8047,8570.252,2456.167,v1-corr-skip-constant,2569904e
