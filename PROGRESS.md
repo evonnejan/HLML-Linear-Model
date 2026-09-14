@@ -91,6 +91,29 @@
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
 
+### 2026-09-14T10:10:00+08:00 — 釐清「只訓練 1–7 epoch」的成因：兩個機制，非 lr/warmup
+- **Trigger:** 使用者問「為什麼只有效訓練 1–7 個 epoch」。
+- **調查:** 從 24 份 log 解析逐 epoch 的 train_mse / vali_mse / vali_corr / test_corr 曲線。
+- **結論：有兩個**不同**機制，依 exog 與資料量而異，與 learning_rate / warmup 無關（先前的猜測不成立）:**
+  - **機制 A — 快速收斂後在雜訊上選點（exog=none）**
+    train_mse 中位數 ep1 0.2257 → ep5 0.1117 → 最後 0.1078（**epoch 5 後僅再降 3%**，已收斂）。
+    ep4 之後 vali_corr 的全距中位數僅 **0.0082**，即在約 1% 的平台上抖動；
+    「最佳 epoch」實質是在雜訊中抽籤。patience=15 數完 15 個持平 epoch 後停在 ep16–22。
+    例：`drycut__none__mse__f1` ep11–16 的 test_corr 固定為 0.7315，模型已不再移動。
+  - **機制 B — 真正的過擬合（exog=full，且資料少時）**
+    `drycut__full__mse__f1`：train_mse 0.3399→0.1202 持續下降，但 **vali_mse 0.0495→0.5792（爆增 12 倍）**、
+    vali_corr **0.6918→−0.0481**。`old__full__mse__f1` 同型態（vali_corr 0.7678→0.1808）。
+    GRU 參數較多，在 fold1（約 16k windows）2–3 個 epoch 內就記住訓練集。
+    此情況下 **epoch 1 確實是最佳，早停是在保護而非誤判**。
+    對照 `drycut__full__mse__f3`（27.8k windows）：best_ep 6、平台 0.9774、全距 0.0037，**無崩潰** → 印證「資料少才過擬合」。
+- **推翻先前的一個推測:** 我曾據單一 run 推論「早停選到 test 上最差的 epoch」。全量檢查後為
+  **6/24**，非普遍現象（該單一 run `drycut__none__mse__f1` 確實如此：選中的 ep1 test_corr 0.5154 vs 最後 ep 0.7315）。
+- **對結論的影響:** 「模型資料不足」的判讀成立，但成因不是訓練不夠久，而是
+  (a) 小型線性模型 5 個 epoch 就收斂、(b) 加上 exog 後在小資料上過擬合。
+  因此「調 lr/warmup 讓它多訓練幾個 epoch」不會是有效的方向。
+- **Files touched:** 僅 `PROGRESS.md`（分析未改動任何程式或結果）。
+- **Follow-ups:** 若要改善 fold1，方向應是正則化／減少 exog 參數量／增加資料，而非延長訓練。
+
 ### 2026-09-14T05:30:00+08:00 — 實驗矩陣 24 runs 完成；發現模型資料不足為主導因素
 - **Trigger:** 使用者指示開跑，並要求確保「設定正確、過程正確、結果合理」。
 - **執行:** `python run_matrix.py run` → 24/24 完成、**0 失敗**、總計 **28.4 分鐘**（單組 24–152 秒；exog=full 約為 none 的 3 倍，因 GRU）。
@@ -534,7 +557,7 @@
 - [ ] 補上成功判準的數字門檻（目前僅「主指標 corr、須打敗 persistence」，無門檻）。
 - [x] 實驗矩陣的驅動腳本與合表器（2026-09-14，`run_matrix.py` + `collect_matrix.py`，24 條指令 dry-run 驗證通過）。
 - [x] 啟動並完成實驗矩陣 24 runs（2026-09-14，0 失敗，28.4 分鐘，設定/過程/結果三層驗證通過）。
-- [ ] **處理訓練不足**：best epoch 僅 1–7/80，val corr 見頂即下滑（檢查 lr / warmup / early-stop 準則）。
+- [ ] **處理小資料過擬合**：exog=full 在 fold1 的 vali_mse 爆增 12 倍、vali_corr 轉負。方向為正則化／降 exog 參數量，**非**延長訓練（已證實非 lr/warmup 問題）。
 - [ ] 決定是否重跑矩陣於「訓練充分」的設定下，再定 drycut vs 舊法的結論。
 - [ ] 用實驗矩陣取得 drycut vs 舊法的對照結果。
 - [ ] 產 buf=60 正式版檢視圖並抽查（`visualize_drycut_segments.py --meta ...buf60.csv`）。
