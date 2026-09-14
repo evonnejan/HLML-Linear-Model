@@ -1,5 +1,5 @@
 run_key,dataset,exog,loss,fold,config_hash,status,run_dir,superseded_run_dir,started,finished,duration_s,error
-drycut__none__mse__f1,drycut,none,mse,1,e09734ffddeaf939,done,"experiments/matrix_runs/DLinearMix2/DLinearMix2_HL02,HL03,HL04,HL05,HL06-to-HL01_sl60_pl15_st1-1_20260914-092131",,2026-09-14T09:21:29+08:00,2026-09-14T09:21:55+08:00,26.0,
+drycut__none__mse__f1,drycut,none,mse,1,e09734ffddeaf939,pending,,,,,,
 drycut__none__mse__f2,drycut,none,mse,2,962f564910a5de99,pending,,,,,,
 drycut__none__mse__f3,drycut,none,mse,3,0f8591dca43a7a1b,pending,,,,,,
 drycut__none__huber__f1,drycut,none,huber,1,6701effe4cb17830,pending,,,,,,
