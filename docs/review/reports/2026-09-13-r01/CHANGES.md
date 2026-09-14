@@ -171,3 +171,98 @@
 - 最終核對保留上述版本事件，以refresh記錄固定最新HEAD與split hash，確認程式及原始findings不變、文件連結與diff範圍；stdout存於本筆verification。未以舊HEAD的固定hash判準否定正常版本前進。
 
 **本agent本輪共修改2檔、新增3檔，均在報告資料夾。** 中途外部commit已納入其中部分內容，故最終git status不代表本輪所有寫入的完整清單；以本表為準。本agent未改核心程式、測試、dataset、PROGRESS.md或Git設定；未執行訓練、模型推論、checkpoint存取、commit、push。原始finding定級與C-01修正狀態不變。
+
+## 007 · 確認切分介面、釐清corr定義並暫緩共同test
+
+- **記錄日期：** 2026-09-14。
+- **觸發要求：** 使用者確認Segment／Row／外部分派方向，詢問現行pooled與segment corr算法，確認高corr且低MSE目標，並暫緩共用固定test。
+- **接手版本：** HEAD=`3be09d28aae1357775acc8d0cdbe8a115cba6daf`，git status為空；既有commit非本輪操作。
+- **修改前SHA-256：** report.md=`c346c928f88714479bf42e4bfce9443c173c890ecb4b74ba9019652ac41c2665`；CHANGES.md=`6cbf1277acf66646110a70c780b674d4733ff0f156c965ec18f2c9f947a55278`。
+
+| 動作 | 檔案 | 內容／原因 |
+|---|---|---|
+| 修改 | [report.md](report.md) | 新增頂端第四輪裁決與第5f節：確認切分介面方向、精確記錄三種既有corr的軸向、對照尚未實作的window-wise、保留零變異差異及MSE互補解讀、將共用test安排改為暫緩；更新摘要的回覆索引與已裁決題數，避免與後文矛盾 |
+| 修改 | `CHANGES.md` | 追加007，記錄本輪兩檔變更、查核範圍與未實作事項；保留001～006 |
+
+### 查核與限制
+
+- 直接閱讀 `utils/metrics.py:8-15`、`exp/exp_Main2.py:184-220,445-457,696-789`，確認全域逐horizon跨windows後平均、segment all攤平、segment逐horizon及零變異規則。佐證為上述版本程式，沒有新增性能數字或證據檔。
+- 相關程式修改前SHA-256：exp/exp_Main2.py=`d518323065a5e018031c46191ccd1fde33252a45065c30a3e7afae20f43c5c3f`；utils/metrics.py=`592c57491903a19b3bc57105972fb11e1bd6cce27f361684f50b7461d8374c1b`。
+- 本批驗證通過：git diff --check無格式錯誤、原始第1～4節及既有CHANGES 001～006前綴完整保留、兩支corr相關程式hash不變、git diff僅上述兩份文件且無未追蹤新檔。核對時HEAD仍為上述接手版本；不需要訓練或新增回歸測試。
+
+**本輪僅修改上述2份報告文件，沒有新增檔案。** 新介面、corr規則統一、window-wise、開發／最終test分期均未在本輪實作；共同test明確暫緩。未修改核心程式、dataset、PROGRESS.md；未執行訓練、模型推論、checkpoint存取、commit或push。
+
+## 008 · 審查run_matrix／collect_matrix並記錄主表裁決
+
+- **記錄日期：** 2026-09-14。
+- **觸發要求：** 使用者要求查兩支腳本的bug與需求符合度；審查中確認「以best_corr＋anchored為主，同時明列MSE」。
+- **接手版本：** HEAD=`3be09d28aae1357775acc8d0cdbe8a115cba6daf`；report.md／CHANGES.md有第007筆未提交修改，本輪保留。未修改原始第1～4節finding或覆寫先前證據。
+
+| 動作 | 檔案 | 內容／原因 |
+|---|---|---|
+| 修改 | [report.md](report.md) | 新增矩陣專項入口與第5g節，記通過項目、需修問題、與原C-03／C-04／C-05／C-08關聯及新主表裁決 |
+| 修改 | `CHANGES.md` | 追加008，記本輪所有檔案、驗證過程與範圍；001～007保留 |
+| 新增 | [matrix_review.md](matrix_review.md) | 先建立D→C→M→R查核清單，補實際資料統計、10則專項finding、需求符合表、已答Q-MX1及未驗證範圍。6 Major／4 Minor；不改原24則統計 |
+| 新增 | [evidence/matrix_checks_2026-09-14.py](evidence/matrix_checks_2026-09-14.py) | 可重現只讀查核：實際manifest／CLI／sidecar／CSV窗口；全mock的執行狀態與合成合表、缺漏／NaN／標籤／shape反例。無模型或訓練呼叫 |
+| 新增 | [evidence/matrix_checks_2026-09-14.json](evidence/matrix_checks_2026-09-14.json) | 保存Python／pandas／NumPy版本、15個輸入檔hash、24命令核對、各fold窗口數與所有合成probe結果；非模型性能 |
+
+### 查核結果與過程修訂
+
+- 本機Python3.14.3／pandas3.0.1；實際manifest duration_s為str。第一次mock execute在第222行寫float時拋TypeError，佐證JSON重導向當時只有空檔；沒有真實子程序或實驗產物被建立。這是新發現MX-C01，非訓練失敗。
+- 更新probe捕捉該錯誤及最後保存狀態running，再以僅記憶體dtype轉object的fixture驗證其他成功路徑缺口；沒有修改受審manifest或程式。另一次證據腳本的patch因上下文不符未套用，隨即更正，沒有額外檔案改動。
+- 補上完整collector main的記憶體驗證，攔截CSV寫入：完整情境144列long／48列summary／8列wide；缺checkpoint剩141列卻仍通過廣義3fold檢查；一fold的corr／MSE為NaN時summary仍報n_folds=3。
+- 其他重現：改learning_rate後done仍復用；old錯配drycut split仍過preflight；常數horizon令collector corr=1而core≈0.5；錯誤run_args仍按manifest歸類；shape broadcasting、錯位window_idx及零baseline未被適當處理。
+- 實際dataset用selected columns按75列窗口重算；同dataset的none／full test清單hash相同，fold test沿base固定。train／val可用窗口有差異，完整數量見專項報告；未取得任何新模型分數。
+- 證據腳本最終完整重跑成功；內建斷言確認15個輸入檔probe前後hash不變。文件最後再核對diff格式、連結、finding數量、歷史正文與寫入範圍；沒有新增專案tests或訓練測試。
+
+**本輪修改2檔、新增3檔，全部在本報告資料夾。** 未修改run_matrix.py、collect_matrix.py、run.py、其他核心程式、dataset、experiments/manifest.csv、PROGRESS.md；未執行訓練、推論、checkpoint讀寫、commit或push。發現的bug仍待修復，本輪沒有把「審查完成」寫成「程式已修好」。
+
+## 009 · 修正validation完整取樣，詳解六項矩陣問題
+
+- **記錄日期／接手版本：** 2026-09-14，HEAD=`3be09d28aae1357775acc8d0cdbe8a115cba6daf`。接手已有第007／008筆的未提交報告與佐證，全部保留。
+- **授權與範圍：** 使用者明確要求先修改validation shuffle／drop_last；本項核心程式與必要回歸測試獲授權，其餘六項問題、主表MSE及dev／final分期本輪提供詳細解法，不擅自擴大實作。
+
+| 動作 | 檔案 | 內容／原因 |
+|---|---|---|
+| 修改 | `data_provider/Data_Factory.py` | 一行條件由只判test改為val或test，讓val使用shuffle=False、drop_last=False；保留CRLF |
+| 新增 | `tests/test_validation_loader.py` | 真實DataLoader配記憶體索引Dataset；5種val長度各重複3次，另驗train／test／pred，共8個測試；不讀dataset、不載模型、不訓練 |
+| 修改 | [report.md](report.md) | 新增最新修正提示與第5h節、更新現況為C-01／C-04已修及其餘22則未結案；保留原始24則finding正文與歷史分級 |
+| 修改 | [matrix_review.md](matrix_review.md) | 加後續修正提示，更新需求表及C-04現況；其餘10項專項finding保持未修，歷史證據保留 |
+| 新增 | [matrix_remediation.md](matrix_remediation.md) | 詳述六項問題的例子、影響、修復步驟與驗收；澄清主表加MSE與dev／final分期，標示已實作與待實作範圍 |
+| 新增 | [evidence/validation_loader_tests_2026-09-14.txt](evidence/validation_loader_tests_2026-09-14.txt) | 保存本次8個無訓練測試結果，8 passed in 1.94s |
+| 修改 | `CHANGES.md` | 追加009，記錄本輪全部改動、程式hash及驗證；001～008保留 |
+
+### 驗證與限制
+
+- 命令：`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .HLML_Linear_venv/bin/python -B -m pytest -q -p no:cacheprovider tests/test_validation_loader.py`；8 passed。使用-B並關閉pytest cache／plugin autoload，未新增cache或其他測試產物。
+- Data_Factory修改前SHA-256=`639256123532f78d5eced63c636474d855379e945e788e69e347d414d056bac8`，修改後=`ee6bd5950e36a16733969014d8cbdc719e22140f3df2ce10141ec3f6114b12fb`。原matrix_checks JSON保留舊hash作歷史證據；沒有覆寫舊測試結果。
+- 測試確認非空val小於batch仍產生一批、尾批不丟棄、每次樣本順序固定且完整；train保留隨機取樣與丟尾批，test保留完整評估，pred保留batch_size=1。
+- 原C-04隨機丟樣本程式缺口已修；未驗證／未實作空dataset拒絕、NaN／inf與未定義corr的checkpoint防護、歷史checkpoint重選。既有vali先串接batch再計指標，不需要為尾批增加新的loss加權程式。
+- 後續靜態核對包括一行程式diff、相關資料與矩陣程式hash、歷史finding正文及CHANGES前綴、文件連結與本輪寫入範圍；不執行完整matrix probe重寫歷史佐證。
+- 預設git diff --check將原檔保留的CRLF之CR報為行尾空白；未為此改寫整檔換行。使用單次 `git -c core.whitespace=cr-at-eol diff --check` 通過，沒有修改Git設定。其餘hash、歷史正文、文件連結與檔案範圍核對通過。
+
+**本輪修改4檔、新增3檔。** 報告資料夾外僅修改Data_Factory及新增其回歸測試；沒有修改兩支matrix腳本、run.py、exp_Main2、dataset、manifest或PROGRESS.md。未執行訓練、模型推論、checkpoint存取、commit或push。
+
+## 010 · 複核使用者貼入修法，支持corr分階段處理
+
+- **日期／版本：** 2026-09-14，HEAD=`3be09d28aae1357775acc8d0cdbe8a115cba6daf`；接手已有前輪Data_Factory、測試、報告及佐證的未提交修改，全部保留。
+- **要求：** 審查附件六項修法是否可用，並評估先改collector、保留utils CORR。這次僅評估方案，沒有執行修復。
+- **附件：** `/Users/zkc/.codex/attachments/90e81b5c-ef69-4376-b75c-36fc6edd955c/pasted-text.txt`；hash存於本輪JSON，附件未修改。
+
+| 動作 | 檔案 | 內容／原因 |
+|---|---|---|
+| 修改 | [matrix_remediation.md](matrix_remediation.md) | 新增後續方案提示及逐項複核：schema文字空值、hash／plan缺項、split路徑與值契約、corr分期條件、metadata一致性、set與assert缺口；更正early stopping呼叫關係，記未答Q-P1 |
+| 修改 | [report.md](report.md) | 新增頂端提示與第5i節，摘要方案可接受條件及#4分期範圍；原findings與修正狀態不變 |
+| 修改 | `CHANGES.md` | 追加010，記本輪檔案、查核與限制，001～009保留 |
+| 新增 | [evidence/proposal_checks_2026-09-14.py](evidence/proposal_checks_2026-09-14.py) | 只讀實際manifest／sidecar，加記憶體schema／StringIO round-trip、hash盲點、微尺度corr、set去重／assert反例及AST選模接線；不訓練、不寫正式產物 |
+| 新增 | [evidence/proposal_checks_2026-09-14.json](evidence/proposal_checks_2026-09-14.json) | 保存上述結果、pandas版本、附件及14個受查檔hash；全為方案查核，無新模型性能 |
+
+### 結果與限制
+
+- 貼文Float64讀法能寫135.7並成功round-trip；全域空值會產生pd.NA文字。加上僅數值欄na_values的替代probe後重跑成功，選填文字保留空字串。
+- 確認config hash不隨FOLDS／LOSSES變動，且CONST未含huber_beta等實際預設；sidecar正確配對的路徑原始字串不同，解析後才相同。Set掩蓋重複、optimize=1會移除assert也已重現。
+- AST及直接讀碼證實現行early stopping以vali的np.corrcoef選模，非utils CORR；支持將collector規格先明確化，utils的legacy test／anchored輸出遷移另行處理。未將「分期同意」標成C-05已解決。
+- 貼文std min=171.8／267.6沒有來源，已提Q-P1；目前未答，僅作未獨立驗證的單次觀察，不推論整批均不觸發。沒有為尋找對應結果而計算舊test的新性能。
+- 兩次probe均完成，受查14檔在probe前後hash不變；本輪僅文件與佐證。最終另核對文件連結／diff、歷史正文及檔案範圍，保留前輪已授權的一行Data_Factory修改。
+
+**本輪修改3檔、新增2檔，皆在報告資料夾。** 未修改任何核心程式／測試／dataset／manifest，未訓練、推論、讀寫checkpoint、commit或push。第009筆的validation修正仍是最近一次程式修正；六項方案與主表／dev-final工作仍待實作。

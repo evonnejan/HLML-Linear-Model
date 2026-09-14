@@ -1,0 +1,188 @@
+{
+  "head": "3be09d28aae1357775acc8d0cdbe8a115cba6daf",
+  "source_hashes": {
+    "run_matrix.py": "4ac6565977d03db7893cced525d37e4ad99b20c878b0687a601fc9fc9494705a",
+    "collect_matrix.py": "a11ca65f4bab9963e87134adc2e68101ca752f7d6fb7f53f5086e3f3a522b7ef",
+    "run.py": "6e419ce9d25eb2314f02c1befafc410b47f2f1e2ea24c6b2c666478a9d277771",
+    "exp/exp_Main2.py": "d518323065a5e018031c46191ccd1fde33252a45065c30a3e7afae20f43c5c3f",
+    "utils/metrics.py": "592c57491903a19b3bc57105972fb11e1bd6cce27f361684f50b7461d8374c1b",
+    "data_provider/Data_Factory.py": "ee6bd5950e36a16733969014d8cbdc719e22140f3df2ce10141ec3f6114b12fb",
+    "data_provider/Data_Loader.py": "bd3530349049e46671266e1a1d1aea983ffb8c6acb784eec0f3fa40b4eb08628",
+    "build_splits.py": "003f01ee263fc9ddf713d3ca36e82a59717336c18439d8984087e1be7191bd9b",
+    "compute_anchored_mse.py": "ae3b362db81f2b584a7fbc6f324848a6c0436f98b409567aaa12425a13d66b1a",
+    "experiments/manifest.csv": "76530f40b7e4ab3094e154d5d5e4f886c0a2a9a8499c7a5ab5a2ec303610c694",
+    "dataset/splits_train_old.csv": "f89ba75c61ce8e3badfff6d0e073a1d4f7c94215e64689db58ad9403ff470b39",
+    "dataset/splits_train_old.json": "03f5d59b5d52d4d0d3567e37dce34a7a8746f77a2aeb9016e9b1a87ca40cf3a7",
+    "dataset/splits_train_drycut_L3h_buf60.csv": "f8068e87b8a7418734d93e2322de152d260e9567883217a3d366d026e4d0d4a3",
+    "dataset/splits_train_drycut_L3h_buf60.json": "bb8a9fc7570b15d2939105341237ff673f1cdf246c6c092e7efd0217baa91b6d"
+  },
+  "pandas": "3.0.1",
+  "attachment_sha256": "2643b5b70c9904da4d5f90f9b0ce5f0d1e5ac93cc50d869a21e92c03183c8971",
+  "proposed_read": {
+    "duration_dtype": "Float64",
+    "assign_135_7": 135.7,
+    "missing_text": {
+      "run_dir": true,
+      "error": true,
+      "finished": true
+    }
+  },
+  "path_from_missing_run_dir": "TypeError: argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'NAType'",
+  "slice_missing_error": "TypeError: 'NAType' object is not subscriptable",
+  "truth_test_missing_status": "TypeError: boolean value of NA is ambiguous",
+  "numeric_round_trip": true,
+  "scoped_numeric_na_policy": {
+    "duration_dtype": "Float64",
+    "duration_value": 135.7,
+    "error_stays_empty_string": true,
+    "run_dir_stays_empty_string": true
+  },
+  "fold_change_not_hashed": {
+    "before": [
+      1,
+      2,
+      3
+    ],
+    "after": [
+      1,
+      2
+    ],
+    "same_hash": true
+  },
+  "loss_grid_change_not_hashed": {
+    "before": [
+      "mse",
+      "huber"
+    ],
+    "after": [
+      "mse"
+    ],
+    "same_hash": true
+  },
+  "implicit_training_defaults_not_hashed": [
+    {
+      "flag": "--dlinear_kernel_size",
+      "default": 25,
+      "in_CONST": false
+    },
+    {
+      "flag": "--fusion_hidden_dim",
+      "default": 32,
+      "in_CONST": false
+    },
+    {
+      "flag": "--lradj",
+      "default": "type1",
+      "in_CONST": false
+    },
+    {
+      "flag": "--huber_beta",
+      "default": 1.0,
+      "in_CONST": false
+    }
+  ],
+  "data_path_comparison": {
+    "sidecar": "dataset/train_old.csv",
+    "matrix_data_path": "train_old.csv",
+    "raw_strings_equal": false,
+    "resolved_files_equal": true
+  },
+  "split_values": {
+    "drycut": {
+      "split": [
+        "test",
+        "train",
+        "val"
+      ],
+      "fold_1": [
+        "",
+        "train",
+        "val"
+      ],
+      "fold_2": [
+        "",
+        "train",
+        "val"
+      ],
+      "fold_3": [
+        "",
+        "train",
+        "val"
+      ]
+    },
+    "old": {
+      "split": [
+        "test",
+        "train",
+        "val"
+      ],
+      "fold_1": [
+        "",
+        "train",
+        "val"
+      ],
+      "fold_2": [
+        "",
+        "train",
+        "val"
+      ],
+      "fold_3": [
+        "",
+        "train",
+        "val"
+      ]
+    }
+  },
+  "checkpoint_corr_call_path": {
+    "vali_calls": [
+      "(diff ** 2).mean",
+      "batch_x.float",
+      "batch_x.float().to",
+      "batch_y.detach",
+      "batch_y.detach().cpu",
+      "batch_y.detach().cpu().numpy",
+      "batch_y.float",
+      "batch_y.float().to",
+      "corrs.append",
+      "float",
+      "len",
+      "np.abs",
+      "np.abs(diff).mean",
+      "np.concatenate",
+      "np.corrcoef",
+      "np.mean",
+      "outputs.detach",
+      "outputs.detach().cpu",
+      "outputs.detach().cpu().numpy",
+      "p2[:, h].std",
+      "preds.append",
+      "preds.reshape",
+      "range",
+      "self._forward",
+      "self._slice_output",
+      "self.model.eval",
+      "self.model.train",
+      "t2[:, h].std",
+      "torch.no_grad",
+      "trues.append",
+      "trues.reshape"
+    ],
+    "train_score_lines": [
+      "vali_metrics = self.vali(vali_loader)",
+      "vali_score = self._select_score(vali_metrics, primary_metric)",
+      "alt_score = self._select_score(vali_metrics, alt_metric)"
+    ]
+  },
+  "nonconstant_tiny_scale": {
+    "std": 8.16496580927726e-09,
+    "legacy_corr": 0.00019996000799840034,
+    "pearson": 1.0
+  },
+  "set_hides_duplicates": {
+    "rows": 2,
+    "unique_rows": 1,
+    "missing": 0,
+    "extra": 0
+  },
+  "optimized_assert_accepts_wrong_shape": true
+}

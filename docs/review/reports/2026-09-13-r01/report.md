@@ -2,6 +2,14 @@
 
 本次新增檔案與後續修訂詳見 [變更紀錄](CHANGES.md)。
 
+**最新方案複核（2026-09-14）：** 已核對使用者貼入的六項修法，方向可採但需補schema空值、凍結設定、split值、重複結果等契約；支持#4先只改合表器並記有效horizon與eval版本，utils CORR留待獨立處理。更正貼文：目前early stopping走vali內np.corrcoef，沒有呼叫utils CORR。詳見第5i節與 [逐項方案複核](matrix_remediation.md)。本輪未修改程式。
+
+**最新實作（2026-09-14，validation修正）：** 已依使用者要求讓val明確使用shuffle=False、drop_last=False；8個不含訓練的DataLoader測試通過。C-04的隨機丟樣本程式缺口已修，原finding正文保留歷史狀態。六項矩陣問題、主表MSE與dev／final分期的詳細解法見 [修復設計說明](matrix_remediation.md) 及第5h節；這些其餘程式修改尚未實作。
+
+**最新專項審查（2026-09-14，矩陣腳本）：** 已完成run_matrix.py／collect_matrix.py及必要接線查核，詳見 [矩陣專項報告](matrix_review.md) 與第5g節。新增專項條目10則（6 Major、4 Minor，含原C-05的合表器延伸），原始24則finding計數不變。確認本機首個run結束後duration_s寫入會拋TypeError；本輪沒有實作修復。使用者新裁決：主表採best_corr＋anchored，同時明列MSE。
+
+**最新裁決（2026-09-14，第四輪討論）：** 使用者確認Segment／Row及外部分派的介面方向、研究目標為高corr且低MSE，並決定暫緩共用固定test。第5f節記錄目前pooled／segment corr的實算軸向與限制；涉及後續安排時以第5f節為準，第5c～5e節保留歷史討論。本輪只修改本報告與CHANGES.md，沒有實作新切分介面或修改指標。
+
 **最新設計評估（2026-09-14，第三輪討論）：** 以本輪開始時已存在的HEAD `1c87927` 為基準；本輪未修改程式。第5e節更新split_file可選、未來明確row模式、window-wise corr缺口、開發／最終評估改動量，以及「各run自行用val選checkpoint、共用固定test」的可行方案。先前第5c／5d節是歷史討論，衝突時以第5e節為準。
 
 **同輪版本變動：** 查核期間HEAD由其他工作進展到 `1ce6302`，兩份dataset split內容亦改變；本輪沒有執行commit或重產split。按目前split、seq_len=60／pred_len=15／無兩旗標重驗，test為drycut 6,240、old 5,523，共同5,198。先前5,700／4,839／4,521是seq_len=96與原始split的快照；不要混用。新佐證見 `evidence/assessment_refresh_2026-09-14.json`。
@@ -26,8 +34,8 @@
 |---|---|---|
 | 資料 D、程式 C、方法 M、文件 R | 已完成規定範圍的閱讀、抽查與判定 | 第1–4節；詳細覆蓋見附錄 |
 | T-01～T-33 | 33條均已給判定與依據 | 含部分相符、無法判定及宣稱有問題，不等於33條全部通過 |
-| Findings | 原始24則；C-01程式防護已修復，其餘23則尚未結案 | 原始分級1 Blocker／17 Major／6 Minor；尚未結案1 Blocker／16 Major／6 Minor。C-01歷史實驗分類仍待Q-C1 |
-| 使用者裁決 | 原始11題；本階段Q-M1／M3已以排除兩旗標裁決，其餘9題仍有待答內容 | 第5節保留原問題；第5d節為最新回覆，先前第5c節保留歷史討論 |
+| Findings | 原始24則；C-01輸入防護與C-04隨機丟val樣本程式缺口已修，其餘22則尚未結案 | 原始分級1 Blocker／17 Major／6 Minor；尚未結案1 Blocker／15 Major／6 Minor。C-01歷史實驗分類仍待Q-C1；C-04修正不追溯更新舊checkpoint，空評估／NaN選模防護仍待實作 |
+| 使用者裁決 | 原始11題；本階段Q-M1／M3已以排除兩旗標裁決，其餘9題仍有待答內容 | 第5節保留原問題；第5c～5f節按時間記錄回覆，最新安排見第5f節 |
 | SQL、正式性能、硬體與其他受限驗證 | 未驗證，原因已列 | 附錄集中列出補齊條件；禁止訓練與範圍限制仍有效 |
 | 報告／變更紀錄完整性 | 已補充核對 | `evidence/completeness.txt`；保留首次佐證，不覆寫歷史輸出 |
 
@@ -57,9 +65,9 @@
 
 資料切分已可重現，但「沒有時間重疊」仍不足以保證可部署、可比較、可投稿的研究結論。
 
-### 給使用者的問題（原始摘要；最新回覆見第5c節）
+### 給使用者的問題（原始摘要；後續回覆見第5c～5f節）
 
-完整功課與影響見第5節；以下每題已在所屬block完成時提出。09-14已收到部分相關決策，尚不能將任何一題所有細節視為已結案；最新狀態以第5c節為準。
+完整功課與影響見第5節；以下每題已在所屬block完成時提出。09-14已收到部分相關決策，本階段Q-M1／M3已裁決，其餘9題仍有待答內容；後續回覆見第5c～5f節，不將方向確認等同全部細節結案。
 
 | 問題 | 待裁決事項 |
 |---|---|
@@ -735,6 +743,88 @@ Pearson只看中心化後的線性形狀，不能同時驗幅度或絕對水位�
 共用eval規格應固定origin／horizon、真值、可用原始欄位、補值及NaN規則；每個run按訓練時欄序取輸入並使用自己的train scaler，標準化後值不必相同。先保留T所需完整輸入＋未來目標時間範圍，再排除old與drycut train/val中相交或跨界的事件，保持當前研究要求的時間隔離。不能只指定同一test開始日期，也不能只複製兩份語意不同的segment ID。
 
 rolling僅發生在T之前：各fold自己的train／val可以不同，但T在所有dataset與fold固定。各fold如何產生最終test表、是否另以預定訓練長度在dev重訓、是否採固定fold或預先定義ensemble，需在讀T分數前固定；不以T選最佳fold或反覆更改矩陣。這個方案技術可行，不需重寫模型；本輪沒有重產任何split／eval資料。
+
+## 5f. 2026-09-14 第四輪：指標定義與暫緩共同test
+
+### 本輪裁決與範圍
+
+- 使用者確認Segment模式／Row模式／使用外部分派的介面方向。延續第5e節：segment／row是切分單位，外部檔案是分派來源；segment模式要求segment_col，split_file僅在選用外部分派時要求。Row保留為未來明確選用的模式，不能由漏填segment_col自動退回；介面尚未實作，C-02的既有row scaler問題也未因此修復。
+- 研究目標確定為「高corr且低MSE」。尚未指定兩者取捨門檻、權重或新的checkpoint複合分數，不能自行把此目標改寫成某項新選模規則。
+- 共用固定test暫緩；第5e節方案保留為日後參考，不列為本階段即將實作的工作。此決定針對跨old／drycut共用評估母體，並未撤回先前「開發用train／val，方法固定後才做預先規劃的最終test比較」的方向。各run的val仍可不同，但run內跨epoch需固定完整。
+
+本輪接手HEAD為 `3be09d28aae1357775acc8d0cdbe8a115cba6daf`，git status為空；這是既有版本，不是本輪commit。本輪只重新讀取corr相關程式並修改report.md與CHANGES.md；未重跑整份review、讀取新test性能、訓練或修改程式／dataset／split。下列定義適用目前單一target、preds／trues形狀為[N, P, 1]的主流程，P=15時可理解為未來15個分鐘步。
+
+### 現在pooled corr怎麼算
+
+令p[i,h]、y[i,h]分別為第i個window對第h步的預測與真值。`utils/metrics.py:8-15`先沿axis 0中心化，即對每個horizon跨所有windows（包含不同segment）計算：
+
+`r[h] = Σ_i ((p[i,h]−mean_i(p[:,h])) × (y[i,h]−mean_i(y[:,h]))) / (sqrt(Σ_i (p[i,h]−mean_i(p[:,h]))²) × sqrt(Σ_i (y[i,h]−mean_i(y[:,h]))²) + 1e-12)`。
+
+`exp/exp_Main2.py:455-457`再對這P個值取nanmean，得到test輸出的Corr(mean)。資料有限且各horizon都有變異時，就是P個近似Pearson係數的等權平均。以1000個window、15步為例：每步用1000組配對算一個corr，最後平均15個corr。這不是把15000組直接攤平算一次，也不是先算每個segment或window的corr再平均。
+
+長segment提供更多windows，對全域樣本分布的影響較大；全域corr並非各segment corr的線性加權平均。不同事件的水位高低差也會進入每個horizon的相關性，因此高pooled corr不能保證每個事件、每個15步window都學好形狀。
+
+### 現在segment corr怎麼算
+
+`exp/exp_Main2.py:_save_segment_metrics`依segment_ids篩選同一段的預測／真值，輸出 `metrics_segment.csv`。假設某段有N_s個window：
+
+| 欄位／指標 | 實際配對方式 | P=15、N_s=100的例子 |
+|---|---|---|
+| Segment，horizon=all | 將該段[N_s, P, 1]攤平，一次計算Pearson | 用1500組配對算一個corr |
+| Segment，horizon=1～15 | 固定一個horizon，僅跨該段的windows計算Pearson | 每步用100組配對，得到15個corr |
+| Window-wise（目前主流程沒有） | 固定一個window，跨它的P個horizon計算Pearson | 每window用15組配對，得到100個corr |
+
+實作位置為 `exp/exp_Main2.py:745-765,768-789`。Segment all不是該段15個horizon corr的平均，也不是100個window corr的平均；它仍可能受到段內不同起點水位高低的影響。重疊窗口中的同一target_time可有不同origin／horizon的預測，all會保留這些配對，不先依target_time去重。Segment MSE則對該段所有window×horizon的平方誤差取平均。
+
+零變異規則仍有C-05差異：validation跳過真值或預測不變的horizon，全部無效時回NaN；test的CORR用分母加1e-12，使有限常數資料的corr為0並納入平均；segment helper在任一側常數或配對少於2筆時回NaN。本輪只是澄清現況，未統一規則。
+
+### 高corr且低MSE的解讀
+
+Corr衡量中心化後的線性相關，MSE衡量預測與真值的數值誤差；兩者都需要。例：真值[1,2,3]、預測[101,102,103]，Pearson為1但MSE為10000。呈現raw或anchored方法時，corr與MSE應出自同一套預測、同一評估樣本，不能把不同方法各自最好的指標拼成一個方法的結果。先保留pooled與segment診斷；本輪沒有新增window-wise或delta實作。
+
+共用test暫緩期間，old／drycut各自原生test的分數可以分別記錄，但因樣本不同，其差值不能直接歸因於模型或切段方法優劣。這是結果解讀限制，不阻擋使用者已決定的探索順序。
+
+## 5g. 2026-09-14 矩陣驅動與合表器專項審查
+
+使用者要求確認run_matrix.py與collect_matrix.py是否有bug、是否達成已討論目標。本輪依D→C→M→R整理限定範圍補充，完整證據與逐則固定欄位見 [matrix_review.md](matrix_review.md)。不是重新審查全專案或修改原始finding定級。
+
+**已符合：** 24組唯一命令；明列HL02～HL06且不含target；none／full均排除isRain與min_since_rain；segment＋外部分派參數正確；anchored平移公式一致；完整合成輸入能產144列long、48列summary、8列wide。同dataset的fold test固定，none／full test窗口也相同，drycut6240、old5523；跨dataset共用test仍依使用者裁決暫緩。
+
+**需修正：** pandas 3.0.1下duration_s的str→float寫入使矩陣在首組完成後中斷；resume未鎖設定／資料版本；sidecar未驗data與split配對；collector常數horizon規則與上游不同；run_args／checkpoint標籤未交叉驗證；缺checkpoint、整組配置或NaN仍可得到誤導性完整統計；baseline=0改善率除零；done未驗收run_dir／產物。主表缺MSE及fold test說明錯誤屬呈現／文件問題。
+
+**沿用的既有問題：** C-03常數欄選擇未遵循fold train、C-04 validation隨機丟樣本、C-08每epoch與每run自動test仍會影響本矩陣。沒有將已修target防護重新列成未修；C-02 row scaler不是本矩陣file＋segment路徑的實際觸發項。
+
+審查途中提出Q-MX1並獲使用者裁決：**以best_corr＋anchored為主，同時明列MSE**。因此不要求現在改為雙checkpoint並列主視角或新增複合選模權重；建議補headline與wide的絕對MSE與有效fold數。此裁決補足第5f節雙指標目標的呈現方式，不表示使用者已定義corr／MSE硬門檻。
+
+本輪僅更新本報告與CHANGES.md，新增matrix_review.md及evidence內一支probe與JSON結果。沒有訓練、模型推論或真實test性能探索；子程序及合表輸出均以mock驗證。實際manifest與核心程式未改。首輪probe發現新bug後中斷，調整probe捕捉例外後完整完成，詳見CHANGES第008筆。
+
+## 5h. 2026-09-14 Validation取樣修正與六項問題解法
+
+使用者明確要求先修改validation的shuffle／drop_last，因此本項及必要回歸測試可寫入報告資料夾外；禁止訓練、commit及push仍有效。本輪其他要求為解釋矩陣六項問題、MSE呈現與dev／final分期，沒有擴大成所有問題的修復。
+
+`data_provider/Data_Factory.py:15`由只判test改為判val或test，共用shuffle=False、drop_last=False、args.batch_size。程式diff只有一行，保留CRLF；train與pred行為不變。新增 `tests/test_validation_loader.py`，真實DataLoader搭配記憶體索引Dataset：5種長度各連續3次完整有序取樣，另驗train／test／pred行為，共8個測試通過。未載入實際dataset或模型，未訓練。
+
+**C-04隨機丟樣本的程式缺口已修復。** 小於batch_size的非空val現在仍有尾批；既有vali將各batch串接再算指標，不會把尾批當作與完整batch等權的batch平均。這不等於已處理空dataset、NaN／inf或所有horizon的corr未定義；也不會重新選出過去run的checkpoint。
+
+詳細解釋與修法見 [matrix_remediation.md](matrix_remediation.md)：manifest數值schema與原子保存、凍結設定及resume身份、sidecar來源與內容核對、共用corr契約／有效步數、run_args及checkpoint身份驗收、完整結果網格與有效fold數。主表明列MSE是把已有計算結果加到console與wide，不是改模型；其corr與MSE都須來自同一best_corr＋anchored預測。Dev／final分期則需停止逐epoch test，另設凍結後獨立評估入口，不能用目前會改變資料分派的train_only替代。
+
+本輪保留「best_corr＋anchored為主、同時明列MSE」及「共用固定test暫緩」的已確認方向。矩陣六項問題與主表／分期修改尚未實作；專項報告的C-04狀態已同步更新，其餘finding保留。
+
+驗證命令與結果見 `evidence/validation_loader_tests_2026-09-14.txt` 及CHANGES第009筆。歷史matrix_checks JSON中Data_Factory的hash對應修正前版本，保留作當時證據，不能把這次已授權的一行修正誤報為歷史佐證錯誤。
+
+## 5i. 2026-09-14 貼入修法的驗收與#4分階段處理
+
+使用者要求審查六項修法，並傾向先只改collector的NaN／有效步數／常數警告，將utils.metrics.CORR獨立處理。本輪支持此分期，僅更新方案紀錄，未實作任何新增修法；上一輪validation完整取樣修正保持有效。
+
+已用本機pandas／StringIO驗證貼文Float64可解duration賦值，但全域na_values=['']會把選填文字轉pd.NA；建議數值欄限定空值並驗必填欄。貼文config hash漏LOSSES／FOLDS及run.py隱含訓練預設，需凍結resolved設定與plan格線；sidecar路徑需正規化，base split禁止空值，fold欄才允許空；collector應核對凍結metadata；set比對前需查重複，shape用顯式例外而非assert。詳述見 [matrix_remediation.md](matrix_remediation.md)。
+
+**呼叫路徑更正：** 現行Exp_Main.vali自行用np.corrcoef並跳過常數horizon，train從該vali_metrics選checkpoint；utils CORR則用於最終test報表及既有anchored工具。把utils CORR稱為目前early stopping的計算函式不符程式。保留它的理由是分批遷移／驗收評估契約，而非此修改必然改動現行選模。
+
+第一階段collector應記corr定義、eval_version、各variant有效horizon及原因，部分有效明確標partial_horizons，全無效留NaN，NaN／inf輸入拒收。警告用logging，不用assert；summary同時揭露有效fold與全horizon有效fold數。上游legacy corr與新表不可無標示混合，C-05整體一致性仍待後續統一。此分期不代表其餘矩陣執行問題或dev／final分工已修。
+
+貼文真實run std最小值171.8／267.6沒有提供來源路徑；已提Q-P1詢問run／checkpoint／variant，在未答前不把單次觀察當成整批24-run保證。微尺度合成反例也證明「std非0」本身不足以保證epsilon與Pearson結果一致。此處僅核對指標定義，未計算任何真實test的新性能。
+
+證據為 `evidence/proposal_checks_2026-09-14.py` 及JSON：含附件hash、14個受查核心／manifest／split檔hash、schema與round-trip、hash盲點、AST選模接線、set去重及-O assert反例。本輪不新增finding分級或修改原始finding正文，詳見CHANGES第010筆。
 
 ## 6. 附錄
 

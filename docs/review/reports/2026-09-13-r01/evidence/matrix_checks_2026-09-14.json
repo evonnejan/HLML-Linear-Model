@@ -1,0 +1,373 @@
+{
+  "head": "3be09d28aae1357775acc8d0cdbe8a115cba6daf",
+  "sha256": {
+    "run_matrix.py": "4ac6565977d03db7893cced525d37e4ad99b20c878b0687a601fc9fc9494705a",
+    "collect_matrix.py": "a11ca65f4bab9963e87134adc2e68101ca752f7d6fb7f53f5086e3f3a522b7ef",
+    "run.py": "6e419ce9d25eb2314f02c1befafc410b47f2f1e2ea24c6b2c666478a9d277771",
+    "exp/exp_Main2.py": "d518323065a5e018031c46191ccd1fde33252a45065c30a3e7afae20f43c5c3f",
+    "data_provider/Data_Factory.py": "639256123532f78d5eced63c636474d855379e945e788e69e347d414d056bac8",
+    "data_provider/Data_Loader.py": "bd3530349049e46671266e1a1d1aea983ffb8c6acb784eec0f3fa40b4eb08628",
+    "utils/metrics.py": "592c57491903a19b3bc57105972fb11e1bd6cce27f361684f50b7461d8374c1b",
+    "build_splits.py": "003f01ee263fc9ddf713d3ca36e82a59717336c18439d8984087e1be7191bd9b",
+    "experiments/manifest.csv": "76530f40b7e4ab3094e154d5d5e4f886c0a2a9a8499c7a5ab5a2ec303610c694",
+    "dataset/train_old.csv": "27bf60b754a5ea3b8ab262687d585b0e7910534ce86e9950173f6bd6a970c102",
+    "dataset/train_drycut_L3h_buf60.csv": "27df72f138963cb2f30ba28ecb6fef09f5baeb23f9e8eae0ae559bd59b00f48c",
+    "dataset/splits_train_old.csv": "f89ba75c61ce8e3badfff6d0e073a1d4f7c94215e64689db58ad9403ff470b39",
+    "dataset/splits_train_old.json": "03f5d59b5d52d4d0d3567e37dce34a7a8746f77a2aeb9016e9b1a87ca40cf3a7",
+    "dataset/splits_train_drycut_L3h_buf60.csv": "f8068e87b8a7418734d93e2322de152d260e9567883217a3d366d026e4d0d4a3",
+    "dataset/splits_train_drycut_L3h_buf60.json": "bb8a9fc7570b15d2939105341237ff673f1cdf246c6c092e7efd0217baa91b6d"
+  },
+  "manifest_status": {
+    "pending": 24
+  },
+  "environment": {
+    "python": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 17.0.0 (clang-1700.6.3.2)]",
+    "pandas": "3.0.1",
+    "numpy": "2.4.3",
+    "actual_manifest_dtypes": {
+      "run_key": "str",
+      "dataset": "str",
+      "exog": "str",
+      "loss": "str",
+      "fold": "int64",
+      "status": "str",
+      "run_dir": "str",
+      "started": "str",
+      "finished": "str",
+      "duration_s": "str",
+      "error": "str"
+    }
+  },
+  "commands": {
+    "count": 24,
+    "all_flags_in_run_parser": true,
+    "example_none": [
+      "/Users/zkc/Desktop/HLML/Linear/.HLML_Linear_venv/bin/python",
+      "run.py",
+      "--model",
+      "DLinearMix2",
+      "--data",
+      "custom",
+      "--features",
+      "S",
+      "--target",
+      "HL01",
+      "--input_col",
+      "HL02,HL03,HL04,HL05,HL06",
+      "--segment_col",
+      "segment_id",
+      "--split_mode",
+      "file",
+      "--seq_len",
+      "60",
+      "--pred_len",
+      "15",
+      "--label_len",
+      "30",
+      "--batch_size",
+      "64",
+      "--train_epochs",
+      "80",
+      "--patience",
+      "15",
+      "--learning_rate",
+      "0.001",
+      "--dropout",
+      "0.1",
+      "--seed",
+      "42",
+      "--early_stop_metric",
+      "corr",
+      "--output_root",
+      "experiments/matrix_runs",
+      "--data_path",
+      "train_drycut_L3h_buf60.csv",
+      "--split_file",
+      "dataset/splits_train_drycut_L3h_buf60.csv",
+      "--fold",
+      "1",
+      "--criterion",
+      "mse",
+      "--flatten_fusion"
+    ],
+    "example_full": [
+      "/Users/zkc/Desktop/HLML/Linear/.HLML_Linear_venv/bin/python",
+      "run.py",
+      "--model",
+      "DLinearMix2",
+      "--data",
+      "custom",
+      "--features",
+      "S",
+      "--target",
+      "HL01",
+      "--input_col",
+      "HL02,HL03,HL04,HL05,HL06",
+      "--segment_col",
+      "segment_id",
+      "--split_mode",
+      "file",
+      "--seq_len",
+      "60",
+      "--pred_len",
+      "15",
+      "--label_len",
+      "30",
+      "--batch_size",
+      "64",
+      "--train_epochs",
+      "80",
+      "--patience",
+      "15",
+      "--learning_rate",
+      "0.001",
+      "--dropout",
+      "0.1",
+      "--seed",
+      "42",
+      "--early_stop_metric",
+      "corr",
+      "--output_root",
+      "experiments/matrix_runs",
+      "--data_path",
+      "train_drycut_L3h_buf60.csv",
+      "--split_file",
+      "dataset/splits_train_drycut_L3h_buf60.csv",
+      "--fold",
+      "1",
+      "--criterion",
+      "mse",
+      "--exog_col",
+      "Past10Min,Past1Hr,Now,*gate_opening*",
+      "--flatten_fusion"
+    ]
+  },
+  "preflight_actual": "前置檢查通過：資料集、split 檔、sidecar 參數皆一致。\n",
+  "preflight_wrong_dataset_pair": "前置檢查通過：資料集、split 檔、sidecar 參數皆一致。\n",
+  "data": {
+    "drycut": {
+      "dropped_as_current_run_py": [
+        "north_gate_opening_4"
+      ],
+      "n_segments": 179,
+      "none": {
+        "fold_counts": {
+          "1": {
+            "train": 16983,
+            "val": 5661,
+            "test": 6240
+          },
+          "2": {
+            "train": 22644,
+            "val": 6487,
+            "test": 6240
+          },
+          "3": {
+            "train": 29131,
+            "val": 5638,
+            "test": 6240
+          }
+        },
+        "test_key_hash": "429e60e689a7896e38bffd8a386db9ce6344fdf4241ff9f026d97d394bb8218f",
+        "test_count": 6240
+      },
+      "full": {
+        "fold_counts": {
+          "1": {
+            "train": 16721,
+            "val": 5656,
+            "test": 6240
+          },
+          "2": {
+            "train": 22377,
+            "val": 5417,
+            "test": 6240
+          },
+          "3": {
+            "train": 27794,
+            "val": 5635,
+            "test": 6240
+          }
+        },
+        "test_key_hash": "429e60e689a7896e38bffd8a386db9ce6344fdf4241ff9f026d97d394bb8218f",
+        "test_count": 6240
+      }
+    },
+    "old": {
+      "dropped_as_current_run_py": [
+        "north_gate_opening_4"
+      ],
+      "n_segments": 159,
+      "none": {
+        "fold_counts": {
+          "1": {
+            "train": 16286,
+            "val": 5325,
+            "test": 5523
+          },
+          "2": {
+            "train": 21611,
+            "val": 6010,
+            "test": 5523
+          },
+          "3": {
+            "train": 27621,
+            "val": 5311,
+            "test": 5523
+          }
+        },
+        "test_key_hash": "b746a496a8d905df9c8e82aa0b25f18615a6de531d79307de8276b4a02b9696e",
+        "test_count": 5523
+      },
+      "full": {
+        "fold_counts": {
+          "1": {
+            "train": 15710,
+            "val": 5325,
+            "test": 5523
+          },
+          "2": {
+            "train": 21035,
+            "val": 5238,
+            "test": 5523
+          },
+          "3": {
+            "train": 26273,
+            "val": 5311,
+            "test": 5523
+          }
+        },
+        "test_key_hash": "b746a496a8d905df9c8e82aa0b25f18615a6de531d79307de8276b4a02b9696e",
+        "test_count": 5523
+      }
+    }
+  },
+  "resume_changed_learning_rate": {
+    "status": "done",
+    "run_dir": "synthetic_previous_lr_0.001",
+    "new_command_lr": "0.002"
+  },
+  "native_manifest_execution": {
+    "error": "TypeError: Invalid value '0.0' for dtype 'str'. Value should be a string or missing value, got 'float' instead.",
+    "last_saved_status": "running",
+    "mock_child_calls": 1
+  },
+  "success_without_artifacts_after_fixture_dtype_conversion": {
+    "mock_child_calls": 1,
+    "status": "done",
+    "run_dir": "",
+    "stdout": "待跑 1 組。\n\n[1/1] drycut__none__mse__f1  08:01:14\n    done  0.0 min\n\n============================================================\n進度: done=1\n已完成 1 組，單組平均 0.0 分，累計 0.0 小時\n"
+  },
+  "dry_run": {
+    "child_calls": 0,
+    "printed_commands": 24
+  },
+  "constant_horizon_corr": {
+    "collector": 1.0,
+    "core_test_and_existing_anchored": 0.4999999999999374,
+    "collector_horizons": [
+      "nan",
+      1.0
+    ]
+  },
+  "anchored_formula": {
+    "first_horizon_equals_last_observation": true,
+    "same_translation_as_existing_script": true
+  },
+  "complete_synthetic_collection": {
+    "rows": 144,
+    "all_MSE_finite": true,
+    "has_segment_corr": false,
+    "has_val_metrics": false
+  },
+  "missing_one_checkpoint": {
+    "rows": 141,
+    "warning": "  [WARN] drycut__none__mse__f1/outputs_alt: synthetic/drycut__none__mse__f1/outputs_alt/pred.npy 不存在，跳過。\n",
+    "sanity": "\n--- 一致性檢查 ---\n  drycut: exog=full 的實際欄位組合數 = 1 (應為 1)\n  old: exog=full 的實際欄位組合數 = 1 (應為 1)\n  每個 (dataset,exog,loss) 的 fold 數皆為 3: 是\n  exog=full 的 exog_in: {'drycut': array([1]), 'old': array([1])}  ← 兩資料集若不同，dataset 比較就不只一個變因\n",
+    "affected_group_folds": [
+      2,
+      3
+    ]
+  },
+  "missing_entire_config_sanity": "\n--- 一致性檢查 ---\n  drycut: exog=full 的實際欄位組合數 = 1 (應為 1)\n  old: exog=full 的實際欄位組合數 = 1 (應為 1)\n  每個 (dataset,exog,loss) 的 fold 數皆為 3: 是\n  exog=full 的 exog_in: {'drycut': array([1]), 'old': array([1])}  ← 兩資料集若不同，dataset 比較就不只一個變因\n",
+  "synthetic_main": {
+    "table_shapes": {
+      "results_long.csv": [
+        144,
+        26
+      ],
+      "summary_by_config.csv": [
+        48,
+        13
+      ],
+      "results_wide.csv": [
+        8,
+        3
+      ]
+    },
+    "headline": "\ndataset exog  loss  corr_mean  corr_std  improve_mean  improve_std  n_folds\n drycut full huber        1.0       0.0          75.0          0.0        3\n drycut full   mse        1.0       0.0          75.0          0.0        3\n drycut none huber        1.0       0.0          75.0          0.0        3\n drycut none   mse        1.0       0.0          75.0          0.0        3\n    old full huber        1.0       0.0          75.0          0.0        3\n    old full   mse        1.0       0.0          75.0          0.0        3\n    old none huber        1.0       0.0          75.0          0.0        3\n    old none   mse        1.0       0.0          75.0          0.0        3\n",
+    "summary_has_mse": true,
+    "wide_columns": [
+      1,
+      2,
+      3
+    ]
+  },
+  "nan_fold_summary": [
+    {
+      "n_folds": 3,
+      "corr_mean": 1.0,
+      "mse_mean": 1.3333
+    }
+  ],
+  "wrong_args_accepted": {
+    "rows": 6,
+    "manifest_label": {
+      "loss": "mse",
+      "fold": 1,
+      "checkpoint": "best_corr"
+    },
+    "actual_args_override": {
+      "criterion": "huber",
+      "fold": 3,
+      "early_stop_metric": "mse",
+      "data_path": "wrong_dataset.csv",
+      "exog_col": "HL01"
+    }
+  },
+  "shape_mismatch": {
+    "accepted": true,
+    "rows": 6,
+    "raw_mse": 3.8333333333333335
+  },
+  "zero_baseline": [
+    {
+      "anchoring": "persistence",
+      "improve_mse_pct": "nan"
+    },
+    {
+      "anchoring": "raw",
+      "improve_mse_pct": "-inf"
+    },
+    {
+      "anchoring": "anchored",
+      "improve_mse_pct": "nan"
+    }
+  ],
+  "nan_prediction_accepted": {
+    "metrics": {
+      "mse": "nan",
+      "rmse": "nan",
+      "mae": "nan",
+      "corr": "nan",
+      "corr_h1": "nan",
+      "corr_hN": "nan"
+    },
+    "warning_count": 1
+  },
+  "invalid_window_ids_accepted": [
+    7,
+    8,
+    9
+  ]
+}

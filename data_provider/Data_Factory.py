@@ -12,7 +12,7 @@ def data_provider(args, flag):
     # 確保 args 中有 train_only 屬性，避免報錯
     train_only = args.train_only if hasattr(args, 'train_only') else False
 
-    if flag == 'test':
+    if flag in ('val', 'test'):
         shuffle_flag = False
         drop_last = False
         batch_size = args.batch_size

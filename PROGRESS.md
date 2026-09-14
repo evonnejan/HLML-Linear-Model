@@ -9,7 +9,7 @@
 
 - **Last updated:** 2026-09-13T18:23:43+08:00
 - **Current goal:** 實驗矩陣（24 runs）的驅動腳本與合表器已完成並驗證，24 條指令已 dry-run 檢查通過。**等 review Blocker 清完即可啟動**。之後進 roadmap #1 delta-target。
-- **Status (one line):** `run_matrix.py`（manifest 驅動、可續跑、含前置檢查）與 `collect_matrix.py`（anchored 事後計算、tidy long table + fold 聚合）皆已實測通過；`experiments/manifest.csv` 已產（24 組 pending）。矩陣尚未啟動。
+- **Status (one line):** 依 review 修完 6 項缺陷（含 1 個 blocker）：manifest 型別/原子寫入、plan 凍結 + 逐 run config_hash、sidecar 三層身份核對、corr 有效步數、收集端三方交叉核對、完整性格線。`run_matrix.py`/`collect_matrix.py`/`build_splits.py` 皆已實測。矩陣尚未啟動。
 - **Next steps:**
   1. **第一次完整 review**（Codex）→ 產出 `docs/review/reports/YYYY-MM-DD-r01/report.md`。啟動方式見 `docs/review/README.md`「審查者：從這裡開始」。
   2. **清掉報告中的 Blocker**，特別是 OI-01（`--input_col 'HL*'` 把 HL01 餵進模型）。
@@ -90,6 +90,30 @@
 ---
 
 ## 3. Changelog (newest-first, append-only / 新到舊，只 append)
+
+### 2026-09-14T04:30:00+08:00 — 依 review 修正實驗矩陣的 6 項缺陷（含 1 blocker）
+- **Trigger:** 外部 review 指出 6 項問題並對我提的修法再做更正；使用者要求逐項查證後實作。
+- **先更正我的錯誤陳述:** 我曾說「改 `utils.metrics.CORR` 會牽動 early stopping」——**錯**。`exp_Main2.vali()`(184-220) 自己用 `np.corrcoef` 並明確跳過常數 horizon，選模(289-291)走 `vali_metrics`，**完全不經過 `utils.metrics.CORR`**。故合表器的慣例本就與 early stopping 一致，不一致的是最終 test 報表那條路徑。
+- **六項全部實測成立:**
+  1. **[Blocker]** pandas 3.0.1 的 str dtype 嚴格：`df.at[i,"duration_s"]=135.7` 拋 `TypeError`。該行在 `status="done"` 之後、`save_manifest` 之前 → 第一組跑完 80 epochs 後 crash 且 **manifest 仍停在 running**，續跑會重跑。
+  2. `run_key` 未含 CONST → 改 lr 後續跑會混設定。我原提的 hash 還漏了 `LOSSES`/`FOLDS`/隱含預設（實測拿掉一個 fold 或拿掉 huber，hash 不變）。
+  3. sidecar 只比純量參數，實測把 old 指向 drycut split **仍通過**。而我原提的「比對 data_path」會誤判：sidecar 記 `dataset/train_old.csv`、矩陣用 `train_old.csv`，直接比字串永遠不相等 → 會擋掉所有正確配對。
+  4. corr 兩個入口不一致：`utils.metrics.CORR` 分母加 1e-12 使常數 horizon 算成 **0**；合表器記 NaN 被跳過。實測 `[0,1]→0.5` vs `[nan,1]→1.0`。
+  5. 合表器只信 manifest：實測把 manifest 標成 `huber/fold3/exog full` 但 run_dir 指向 `mse/fold1/exog none`，**照收並正常產表**。checkpoint 名稱寫死 `best_corr/best_mse` 亦與 `exp_Main2:407-417` 的推導不一致。
+  6. `set()` 先吃掉重複：同一 key 出現兩次仍得 `missing=0, extra=0`。`n_folds=("fold","count")` 數列數而非有效值數（3 折中 1 折 corr 為 NaN 時仍記 3）。
+- **What changed:**
+  - `build_splits.py`：sidecar 新增 `data_sha256`/`split_sha256`（內容 hash，路徑字串不可靠）；新增 `file_sha256()`。
+  - `run_matrix.py` 重寫：逐欄 dtype + **逐欄** `na_values`（只讓 fold/duration_s 可空，否則 run_dir/error 變 `pd.NA` 會讓 `Path()`/切片/布林判斷全炸）；`os.replace` 原子寫入；`plan.json` 凍結快照（含 grid/CONST/`IMPLICIT_DEFAULTS`/`RUN_PARAM_KEYS`），**執行一律讀快照不讀模組全域**；`plan_id` + 逐 run `config_hash`；`plan --accept-changes` / `--new`；sidecar 三層核對（資料 hash、split hash、分派有效性——base split 不可空、fold_k 可空、ID 唯一、fold 不得用到 base 的 test）；群組狀態一致性檢查；`run` 偵測 CONST 與快照偏離時明確提示。
+  - `collect_matrix.py` 重寫：`EVAL_VERSION` + `eval_code_hash`（窄範圍：只 hash 4 個定義數字的函式）雙軌，不同步即報錯；corr 回報 `corr_valid_horizons`/`corr_total_horizons`/無效原因；NaN/inf 與 shape 不符用明確例外拒收（非 assert，assert 會被 `python -O` 移除）；checkpoint 名稱由 `early_stop_metric` 推導；三方交叉核對（manifest/run_args/plan 凍結值，exog 比實際欄位與順序，seed 對快照）；完整性格線先 `Counter` 查重再 `set` 查缺漏；四種 fold 數分開報；主表加 MSE。
+- **Result/verification:**
+  - duration_s 寫回並重讀正確（`done`/`135.7`/`run_dir` 含逗號無誤），`error` 仍可切片；無 `.tmp` 殘留。
+  - 改 lr 後 `run` 沿用凍結參數並提示；`plan` 拒絕覆寫並列出 stale；`--accept-changes` 轉 pending 且舊路徑存入 `superseded_run_dir`。
+  - eval 雙軌：竄改 `anchor_transform` 後 `check_eval_version()` 正確報錯（`2569904e → 03493866`）。
+  - 交叉核對：manifest 標 `huber/f3/full` 但 run_dir 為 `mse/f1/none` → **拒收並列出 3 項不符**。
+  - 完整性：未完成時不加 `--partial` → exit code 1 + 乾淨訊息（無 traceback）；`--partial` 正確標記並報 `缺漏 138`。
+  - 真實 run 端到端：`drycut__none__mse__f1` 26 秒完成（16 epochs 早停），manifest 正確寫回。
+- **意外發現:** 單組只需約 26 秒（exog=none、seq_len=60、每 epoch 約 1 秒、patience 15 觸發早停），**24 組的總時間會遠低於原估的 2.8 小時**。
+- **Follow-ups:** 等 review Blocker 清完後 `python run_matrix.py run`。
 
 ### 2026-09-14T03:20:00+08:00 — 實驗矩陣驅動腳本與合表器完成；split 加 sidecar；清除 smoke 產物
 - **Trigger:** 使用者指示「build_splits 加 sidecar」「刪除 5 個 smoke run 目錄」「寫驅動腳本+合表器並 dry-run 檢查」。

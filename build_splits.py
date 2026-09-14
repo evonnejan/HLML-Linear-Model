@@ -34,6 +34,7 @@ Rolling-origin expanding-window CV:
 """
 import argparse
 import fnmatch
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -241,7 +242,13 @@ def report(meta: pd.DataFrame, n_folds: int, ratios: tuple[float, float, float])
         print("\n  每個 fold 的 val 期間皆嚴格晚於其 train 期間；train 隨 fold 擴張（expanding window）。")
 
 
-SIDECAR_KEYS = ["seq_len", "pred_len", "stride", "target", "input_col", "exog_col", "segment_col"]
+def file_sha256(path) -> str:
+    """檔案內容雜湊。路徑字串可能因相對/絕對而不同，內容 hash 才是可靠的身份。"""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def sidecar_path(split_csv: str) -> Path:
@@ -259,6 +266,11 @@ def check_sidecar(split_csv: str, **expected) -> list[str]:
     split 檔的 n_windows 與邊界是針對特定 seq_len/pred_len/欄位集算出來的。
     參數對不上時 segment 指派仍有效（不會 leakage），但比例會偏離目標，
     且 build_splits 報表上的數字與訓練實際拿到的樣本數會兜不攏。
+
+    注意：**本函式只比對純量參數，不比對資料身份**。sidecar 的 `data_path`
+    可能是 'dataset/x.csv' 而呼叫端是 'x.csv'（相對 root_path），直接比字串
+    會誤判；資料與 split 的身份請用 `data_sha256` / `split_sha256` 比對，
+    見 run_matrix.py 的三層檢查。
     """
     meta = load_sidecar(split_csv)
     if meta is None:
@@ -357,6 +369,9 @@ def main() -> None:
         "n_segments": int(len(meta)),
         "n_windows_total": int(meta["n_windows"].sum()),
         "overlap_groups": len(groups),
+        # 內容 hash：路徑字串不可靠，身份以內容為準
+        "data_sha256": file_sha256(args.data_path),
+        "split_sha256": file_sha256(out),      # 產出後才算，防「新 CSV 配舊 sidecar」
     }
     sidecar_path(out).write_text(json.dumps(side, ensure_ascii=False, indent=2), encoding="utf-8")
 
