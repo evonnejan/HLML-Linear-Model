@@ -238,9 +238,14 @@ class Exp_Main(Exp_Basic):
 
     def train(self, setting: str):
         train_data, train_loader = self._get_data("train")
+        validation_only = bool(getattr(self.args, "validation_only", False))
+        if validation_only and self.args.train_only:
+            raise ValueError("validation_only cannot be combined with train_only")
+        test_loader = None
         if not self.args.train_only:
             _, vali_loader = self._get_data("val")
-            _, test_loader = self._get_data("test")
+            if not validation_only:
+                _, test_loader = self._get_data("test")
 
         checkpoint_path = self._checkpoint_dir()
         model_optim = self._select_optimizer()
@@ -272,6 +277,9 @@ class Exp_Main(Exp_Basic):
 
         total_epochs = self.args.train_epochs
         epochs_trained = 0
+        self.training_history = []
+        self.best_epoch = None
+        best_primary_score = float("inf")
 
         print(f"\n{'─'*60}")
         print(f"  Training start  |  model: {self.args.model}  |  device: {self.device}")
@@ -281,15 +289,29 @@ class Exp_Main(Exp_Basic):
 
         for epoch in range(total_epochs):
             epochs_trained = epoch + 1
+            epoch_lr = float(model_optim.param_groups[0]["lr"])
             train_loss = self._run_train_epoch(
                 train_loader, model_optim, criterion, scaler, epoch, total_epochs
             )
 
             if not self.args.train_only:
                 vali_metrics = self.vali(vali_loader)
-                test_metrics = self.vali(test_loader)
+                test_metrics = self.vali(test_loader) if test_loader is not None else None
                 vali_score = self._select_score(vali_metrics, primary_metric)
                 alt_score = self._select_score(vali_metrics, alt_metric)
+                if validation_only and not all(np.isfinite(v) for v in (train_loss, vali_score, alt_score)):
+                    raise ValueError("Non-finite training/validation score; refusing checkpoint selection")
+                if vali_score <= best_primary_score:
+                    best_primary_score = vali_score
+                    self.best_epoch = epoch + 1
+                self.training_history.append({
+                    "epoch": epoch + 1, "learning_rate": epoch_lr,
+                    "train_loss": train_loss, **{f"val_{k}": v for k, v in vali_metrics.items()},
+                })
+                if validation_only:
+                    pd.DataFrame(self.training_history).to_csv(
+                        os.path.join(checkpoint_path, "training_history.csv"), index=False
+                    )
                 self._print_epoch_summary(
                     epoch, total_epochs, train_loss, vali_metrics, test_metrics, primary_metric
                 )
@@ -312,6 +334,84 @@ class Exp_Main(Exp_Basic):
         best_model_path = os.path.join(checkpoint_path, "checkpoint.pth")
         self.model.load_state_dict(torch.load(best_model_path))
         self.epochs_trained = epochs_trained
+        return self.model
+
+    def train_fixed_epochs(self):
+        """Fit once on the full training dataset and keep the final epoch.
+
+        This is deliberately separate from :meth:`train`.  Research training
+        can continue to choose a checkpoint from validation (or, in its legacy
+        train-only path, training loss), while a formal full-data fit has no
+        validation/test loaders, no early stopping, and no best-loss selection.
+
+        ``args.train_only`` is required because the data loader uses that flag
+        to make the train split contain every segment.  ``checkpoint.pth`` is
+        always the state after exactly ``args.train_epochs`` epochs.
+        """
+        if not bool(getattr(self.args, "train_only", False)):
+            raise ValueError("train_fixed_epochs requires train_only=True")
+        if bool(getattr(self.args, "validation_only", False)):
+            raise ValueError("train_fixed_epochs cannot be combined with validation_only=True")
+
+        total_epochs = int(self.args.train_epochs)
+        if total_epochs <= 0:
+            raise ValueError(f"train_epochs must be positive, got {total_epochs}")
+
+        # Intentionally the sole dataset request in this method.  In full-data
+        # mode it contains all segments and also fits X/Y scalers on that scope.
+        train_data, train_loader = self._get_data("train")
+        if len(train_loader) == 0:
+            raise ValueError("Full-data training loader has no batches")
+
+        checkpoint_path = self._checkpoint_dir()
+        model_optim = self._select_optimizer()
+        if str(getattr(self.args, "lradj", "")).startswith("warmup"):
+            warmup_start_lr = self.args.learning_rate * 0.1
+            for group in model_optim.param_groups:
+                group["lr"] = warmup_start_lr
+            print(f"Warm-up: setting initial LR to {warmup_start_lr}")
+        criterion = self._select_criterion()
+        scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
+
+        self.training_history = []
+        self.fixed_fit_train_data = train_data
+        print(f"\n{'─'*60}")
+        print(f"  Fixed full-data fit  |  model: {self.args.model}  |  device: {self.device}")
+        print(f"  epochs={total_epochs}  batch={self.args.batch_size}  lr={self.args.learning_rate}")
+        print("  Checkpoint policy: final epoch only (no validation/test, no early stopping)")
+        print(f"{'─'*60}")
+
+        for epoch in range(total_epochs):
+            epoch_lr = float(model_optim.param_groups[0]["lr"])
+            train_loss = self._run_train_epoch(
+                train_loader, model_optim, criterion, scaler, epoch, total_epochs
+            )
+            if not np.isfinite(train_loss):
+                raise ValueError(f"Non-finite training loss at epoch {epoch + 1}: {train_loss}")
+            self.training_history.append({
+                "epoch": epoch + 1,
+                "learning_rate": epoch_lr,
+                "train_loss": train_loss,
+            })
+            self._print_epoch_summary(epoch, total_epochs, train_loss)
+            # Keep the same scheduler semantics as normal training.  The
+            # post-final adjustment is harmless and makes per-epoch LR history
+            # directly comparable with the existing research loop.
+            adjust_learning_rate(model_optim, epoch + 1, self.args)
+
+        final_model_path = os.path.join(checkpoint_path, "checkpoint.pth")
+        torch.save(self.model.state_dict(), final_model_path)
+        pd.DataFrame(self.training_history).to_csv(
+            os.path.join(checkpoint_path, "training_history.csv"), index=False
+        )
+        self.epochs_trained = total_epochs
+        self.final_epoch = total_epochs
+        # Kept for consumers that already inspect ``best_epoch``.  It means
+        # final epoch here, not a model-selection result.
+        self.best_epoch = total_epochs
+        print(f"{'─'*60}")
+        print(f"  Fixed full-data fit done  |  final epoch: {total_epochs}")
+        print(f"{'─'*60}\n")
         return self.model
 
     def _run_train_epoch(

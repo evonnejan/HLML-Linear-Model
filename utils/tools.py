@@ -27,7 +27,8 @@ def adjust_learning_rate(optimizer, epoch, args):
     elif args.lradj == 'exp':
         # Exponential decay: lr * 0.85^epoch, floor at lr * 0.01
         # e.g. epoch 10 → 0.197x, epoch 20 → 0.039x
-        lr = max(args.learning_rate * (0.85 ** epoch), args.learning_rate * 0.01)
+        gamma = float(getattr(args, 'exp_decay_gamma', 0.85))
+        lr = max(args.learning_rate * (gamma ** epoch), args.learning_rate * 0.01)
         lr_adjust = {epoch: lr}
     elif args.lradj == 'warmup_exp':
         # Linear warm-up for `warmup_epochs` from 0.1*base → base, then exp decay
