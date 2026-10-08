@@ -48,3 +48,9 @@ sh.txt
 # 實驗矩陣：run 目錄與逐 run log 體積大且可重生；彙整後的小表格可入版控
 experiments/matrix_runs/
 experiments/logs/
+
+# Delivery package build output (scripts/package_delivery.py)
+dist/
+
+# Forecast CSV appended by the delivered examples (run_forecast.py / forecast_from_table.py)
+project_stage1/inference/outputs/

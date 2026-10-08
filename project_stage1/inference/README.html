@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HL01 預測程式</title>
+<style>
+:root{--bg:#F3F2EC;--paper:#FBFAF6;--text:#2B3440;--head:#13293D;--muted:#5B6773;--accent:#1B6CA8;
+--line:#D9D6CC;--th:#E9E6DD;--code:#ECEAE2;--zebra:#F6F5F0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181D;--paper:#1C2027;--text:#DCE1E8;
+--head:#F2F4F7;--muted:#9AA6B2;--accent:#7FB6E0;--line:#343A44;--th:#252B34;--code:#262C35;--zebra:#20252D}}
+:root[data-theme="dark"]{--bg:#15181D;--paper:#1C2027;--text:#DCE1E8;--head:#F2F4F7;--muted:#9AA6B2;
+--accent:#7FB6E0;--line:#343A44;--th:#252B34;--code:#262C35;--zebra:#20252D}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif;
+font-size:16px;line-height:1.75}
+main{max-width:980px;margin:0 auto;padding:48px 24px 96px}
+h1{color:var(--head);font-size:2rem;line-height:1.3;margin:0 0 24px}
+h2{color:var(--head);font-size:1.45rem;line-height:1.4;margin:56px 0 16px;padding-top:24px;border-top:1px solid var(--line)}
+h3{color:var(--head);font-size:1.15rem;margin:36px 0 12px}
+p,ul{margin:0 0 16px}
+ul{padding-left:1.5em}
+li{margin:4px 0}
+li>ul{margin:4px 0 0}
+a{color:var(--accent)}
+code{font-family:"JetBrains Mono",Menlo,Consolas,"Courier New",monospace;font-size:.9em;
+background:var(--code);padding:.1em .35em;border-radius:4px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:16px 20px;overflow-x:auto;margin:0 0 16px}
+pre code{background:none;padding:0;font-size:.9rem;line-height:1.6}
+.table-wrap{overflow-x:auto;margin:0 0 20px;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--th);color:var(--head);font-weight:700;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:var(--zebra)}
+nav.toc{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px 24px;margin:0 0 32px}
+nav.toc p{margin:0 0 8px;font-weight:700;color:var(--head)}
+nav.toc ul{margin:0;padding-left:1.2em}
+nav.toc>div>ul{padding-left:0;list-style:none}
+nav.toc a{text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+@media (max-width:600px){main{padding:32px 16px 64px}h1{font-size:1.6rem}h2{font-size:1.25rem}}
+@media print{body{background:#fff;color:#000}main{max-width:none;padding:0}nav.toc{display:none}
+.table-wrap{overflow:visible;border:none}th{background:#eee}a{color:#000}}
+</style>
+</head>
+<body>
+<main>
+<h1 id="hl01-預測程式">HL01 預測程式</h1>
+<nav class="toc"><p>目錄</p><div class="toc">
+<ul>
+<li><a href="#檔案">檔案</a></li>
+<li><a href="#要改與不用改的檔案">要改與不用改的檔案</a></li>
+<li><a href="#環境">環境</a></li>
+<li><a href="#使用方式">使用方式</a><ul>
+<li><a href="#run_forecastpy基本用法">run_forecast.py：基本用法</a></li>
+<li><a href="#forecast_from_tablepy從分鐘表選-t">forecast_from_table.py：從分鐘表選 t</a></li>
+<li><a href="#兩支共通">兩支共通</a></li>
+</ul>
+</li>
+<li><a href="#輸出">輸出</a><ul>
+<li><a href="#結果怎麼用">結果怎麼用</a></li>
+<li><a href="#結果表建議格式">結果表（建議格式）</a></li>
+</ul>
+</li>
+<li><a href="#檢查沒通過時">檢查沒通過時</a></li>
+<li><a href="#找不到可預測的-t-時">找不到可預測的 t 時</a></li>
+</ul>
+</div>
+</nav>
+
+<p>這個資料夾是 HL01 水位預測的推論程式：輸入 60 分鐘的資料，輸出未來 15 分鐘的 HL01 預測。input 的準備方式見 <strong>INPUT_MANUAL</strong>。</p>
+<p>本文件用 <strong>t</strong> 表示預測的起點，也就是 input 最後一列（最新一分鐘）的時間：input 是 t−59 到 t 共 60 列，預測的是 t+1 到 t+15 分鐘的 HL01。例如 t 是 11:00 時，input 是 10:01 到 11:00，預測 11:01 到 11:15。</p>
+<h2 id="檔案">檔案</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>檔案</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>predictor.py</code></td>
+<td>預測入口。<code>Predictor</code> 載入模型，<code>predict()</code> 檢查 input 後回傳 15 筆預測</td>
+</tr>
+<tr>
+<td><code>validation.py</code></td>
+<td>預測前檢查 input，<code>predict()</code> 會自動呼叫</td>
+</tr>
+<tr>
+<td><code>input_schema.json</code></td>
+<td>檢查規格：欄位、列數、時間格式、不可為負數的欄位</td>
+</tr>
+<tr>
+<td><code>model.py</code></td>
+<td>模型的網路結構</td>
+</tr>
+<tr>
+<td><code>model_bundle/config.json</code></td>
+<td>模型設定與特徵順序</td>
+</tr>
+<tr>
+<td><code>model_bundle/scaler.npz</code></td>
+<td>標準化參數</td>
+</tr>
+<tr>
+<td><code>model_bundle/checkpoint.pth</code></td>
+<td>模型權重</td>
+</tr>
+<tr>
+<td><code>__init__.py</code></td>
+<td>讓 <code>from project_stage1.inference import Predictor</code> 可以使用</td>
+</tr>
+<tr>
+<td><code>run_forecast.py</code></td>
+<td>基本用法範例：取 60 列、預測，並把結果附加到 <code>outputs/hl01_forecast.csv</code></td>
+</tr>
+<tr>
+<td><code>forecast_from_table.py</code></td>
+<td>從分鐘表選 t 的範例：找最新可預測的 t 或使用指定的 t，取 60 列預測，並把結果附加到 <code>outputs/hl01_forecast.csv</code></td>
+</tr>
+<tr>
+<td><code>outputs/hl01_forecast.csv</code></td>
+<td>範例程式保存的預測結果，每一輪一列；第一次執行時自動建立</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>model_bundle/</code> 的三個檔案是同一次訓練的產物，必須一起使用，不要單獨替換其中一個。</p>
+<h2 id="要改與不用改的檔案">要改與不用改的檔案</h2>
+<ul>
+<li>要改：<code>run_forecast.py</code> 或 <code>forecast_from_table.py</code>，依你們的用法選一支當基礎，把讀資料和保存結果改成自己系統的寫法（見「使用方式」）；也可以複製到自己的專案再改。</li>
+<li>不用改：其他所有檔案（<code>predictor.py</code>、<code>validation.py</code>、<code>input_schema.json</code>、<code>model.py</code>、<code>model_bundle/</code>、<code>__init__.py</code>）。檢查規則、特徵順序、模型結構和權重都必須和訓練時一致，修改會讓預測出錯。模型需要更新時，會整份替換 <code>model_bundle/</code>。</li>
+</ul>
+<h2 id="環境">環境</h2>
+<ul>
+<li>Python 3.11 以上（pandas 3.0.1、NumPy 2.4.3 的要求），已驗證 Python 3.14。只需要 CPU，不需要 GPU。</li>
+<li>安裝：<code>python -m pip install torch==2.10.0 pandas==3.0.1 numpy==2.4.3</code>。只需要這三個，它們用到的其他套件 pip 會自動一起安裝。</li>
+<li>Linux 上 pip 預設會安裝含 CUDA 的 PyTorch，下載量很大；沒有 GPU 時可以改用 CPU 版：<code>python -m pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu</code></li>
+<li>用 <code>pd.read_sql</code> 從資料庫取資料時，另外安裝你們資料庫的連線套件。</li>
+<li>在包含 <code>project_stage1/</code> 的資料夾執行程式。</li>
+</ul>
+<h2 id="使用方式">使用方式</h2>
+<p>有兩支範例程式，選一支當基礎修改即可：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>程式</th>
+<th>適合的情況</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="run_forecast.py"><code>run_forecast.py</code></a></td>
+<td>基本用法：自己取好 t−59 到 t 的 60 列，直接預測</td>
+</tr>
+<tr>
+<td><a href="forecast_from_table.py"><code>forecast_from_table.py</code></a></td>
+<td>從分鐘表選 t：定期排程或有人臨時要預測時，找最新可預測的 t；也可以指定 t</td>
+</tr>
+</tbody>
+</table></div>
+<p>先在包含 <code>project_stage1/</code> 的資料夾執行一次，確認環境沒問題：</p>
+<pre><code class="language-bash">python -m project_stage1.inference.run_forecast
+python -m project_stage1.inference.forecast_from_table
+</code></pre>
+<p>兩支都會印出 t 為 2024-10-31 11:00:00 的預測。結束碼：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>結束碼</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>預測成功</td>
+</tr>
+<tr>
+<td>99</td>
+<td>input 沒有通過檢查（見「檢查沒通過時」），這一輪不預測</td>
+</tr>
+<tr>
+<td>98</td>
+<td>找不到可預測的 t（見「找不到可預測的 t 時」），這一輪不預測；只有 <code>forecast_from_table.py</code> 會出現</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="run_forecastpy基本用法">run_forecast.py：基本用法</h3>
+<p>示範完整的一輪：取 60 列 → 預測 → 整理成結果表 → 保存。接到自己的系統時，改這兩處：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>步驟</th>
+<th>範例的寫法</th>
+<th>改成</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. 取 60 列</td>
+<td>讀分鐘表範例 <code>examples/example_minute.csv</code> 的最後 60 列</td>
+<td>從 <code>hl01_minute</code> 取 t−59 到 t（手冊 4.3），例如 <code>pd.read_sql(...)</code></td>
+</tr>
+<tr>
+<td>4. 保存結果</td>
+<td>附加到 <code>outputs/hl01_forecast.csv</code></td>
+<td>依你們的系統決定，例如定期把 CSV 匯入資料庫、直接 <code>forecast.to_sql(...)</code>，或直接使用回傳值（見「結果怎麼用」）</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="forecast_from_tablepy從分鐘表選-t">forecast_from_table.py：從分鐘表選 t</h3>
+<p><code>forecast(predictor, t=None, now=None)</code> 先選出 t，再從分鐘表取 t−59 到 t 共 60 列（依時間由舊到新排好）預測，回傳和 <code>predict()</code> 相同的 dict。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>呼叫方式</th>
+<th>t 怎麼決定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forecast(predictor)</code></td>
+<td>從分鐘表最新一列往前找 HL01 是實測值的分鐘當 t，最早只找到「執行時間 − 14 分鐘」，這樣 t+15 才會在執行時間之後；找不到就不預測。執行時間是呼叫當下的台灣時間</td>
+</tr>
+<tr>
+<td><code>forecast(predictor, t="2024-10-31 10:30:00")</code></td>
+<td>直接用這個 t，不管多久以前；t 不在分鐘表裡，或 HL01 在 t 不是實測值，就不預測，也不往前找</td>
+</tr>
+</tbody>
+</table></div>
+<p>例如 13:50 執行、分鐘表最新到 13:45：t 在 13:36 到 13:45 之間找；如果分鐘表停在 12:00，這一輪就不預測。「HL01 是實測值」指修改紀錄表 <code>hl01_change_log</code> 裡沒有這一分鐘 HL01 的紀錄（手冊 4.3）。</p>
+<p>範例資料是 2024 年的，所以直接執行時用 <code>forecast(predictor, now="2024-10-31 11:05:00")</code>，假設在 11:05 執行。接到自己的系統時，改這幾處：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>位置</th>
+<th>範例的寫法</th>
+<th>改成</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read_minute_table()</code></td>
+<td>讀 <code>examples/example_minute.csv</code></td>
+<td>從 <code>hl01_minute</code> 讀指定時間範圍的列，例如 <code>pd.read_sql(...)</code></td>
+</tr>
+<tr>
+<td><code>read_hl01_changes()</code></td>
+<td>沒有修改紀錄</td>
+<td>從 <code>hl01_change_log</code> 讀 HL01 被修改過的分鐘，例如 <code>pd.read_sql(...)</code></td>
+</tr>
+<tr>
+<td><code>main()</code> 1. 選出 t 並預測</td>
+<td><code>forecast(predictor, now="2024-10-31 11:05:00")</code></td>
+<td><code>forecast(predictor)</code>；要指定時間時 <code>forecast(predictor, t=...)</code></td>
+</tr>
+<tr>
+<td><code>main()</code> 3. 保存結果</td>
+<td>附加到 <code>outputs/hl01_forecast.csv</code></td>
+<td>同 <code>run_forecast.py</code> 的「4. 保存結果」</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="兩支共通">兩支共通</h3>
+<ul>
+<li><code>Predictor()</code> 只需要在程式啟動時建立一次，之後每一輪重複呼叫 <code>predict()</code>。找不到 <code>model_bundle/</code>，或三個檔案彼此不一致時，<code>Predictor()</code> 會直接報錯。</li>
+<li><code>predict()</code> 的 input 是 pandas DataFrame：60 列、15 欄（手冊第 0 節）。<code>date</code> 可以是 <code>YYYY-MM-DD HH:MM:SS</code> 文字，也可以是不含時區的時間。</li>
+</ul>
+<h2 id="輸出">輸出</h2>
+<p><code>predict()</code> 回傳一個 dict：</p>
+<pre><code class="language-python">{&quot;time&quot;: &quot;2024-10-31 11:00:00&quot;,
+ &quot;pred&quot;: [1450.0, 1437.681242280028, ..., 1279.3590226036636]}
+</code></pre>
+<ul>
+<li><code>time</code>：t，也就是這份 input 最後一列的時間，格式和 input 相同。</li>
+<li><code>pred</code>：15 個 HL01 預測值，依序是 t+1 到 t+15 分鐘；單位和 input 的 HL01 相同，程式不做四捨五入。</li>
+<li><code>predict()</code> 不會存檔，保存由呼叫端負責。</li>
+</ul>
+<h3 id="結果怎麼用">結果怎麼用</h3>
+<p>現在的設計是範例程式先把每一輪的預測寫到一個 CSV 檔（<code>outputs/hl01_forecast.csv</code>），之後可以再把這個檔案裡的資料寫入資料庫。這只是其中一種作法，可依你們的系統決定，例如：</p>
+<ul>
+<li>定期把 CSV 裡的資料匯入資料庫。</li>
+<li>在程式裡直接 <code>to_sql(...)</code>，每一輪寫進資料庫。</li>
+<li>不存檔，直接使用 <code>predict()</code> 的回傳值串到自己的系統，例如 <code>result["pred"]</code> 就是 15 個預測值的 list。</li>
+</ul>
+<p>兩支範例程式為了方便，都把結果附加到 <code>outputs/hl01_forecast.csv</code>，格式相同，每一輪一列。實際要存在哪裡、要不要分開存、要不要寫進資料庫，由你們決定。</p>
+<p>寫入資料庫的時段可參考 INPUT_MANUAL 4.5。</p>
+<h3 id="結果表建議格式">結果表（建議格式）</h3>
+<p>要存成表時，建議每一輪一列：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>time</th>
+<th>pred_1</th>
+<th>pred_2</th>
+<th>…</th>
+<th>pred_15</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2024-10-31 11:00:00</td>
+<td>1450.0</td>
+<td>1437.681242</td>
+<td>…</td>
+<td>1279.359023</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><code>time</code>：這一輪的 t，每一輪只有一列，可以用它唯一識別一筆。</li>
+<li><code>pred_1</code> 到 <code>pred_15</code>：t+1 到 t+15 分鐘的 HL01 預測。</li>
+<li>表名 <code>hl01_forecast</code> 只是建議，可依你們的命名習慣決定。</li>
+</ul>
+<p>CSV 只會在最後面附加新的一列，所以：</p>
+<ul>
+<li>同一個 t 重跑時會多一列相同的 <code>time</code>，匯入資料庫時以 <code>time</code> 去重即可。</li>
+<li><code>time</code> 不一定由舊到新。例如平常排程依序附加了 t 為 2024-10-31 11:00、11:10、11:20 的三列，之後有人指定 t 為 2024-10-01 08:00 重算，這一列會接在最後面；需要依時間排列時，以 <code>time</code> 排序即可。</li>
+</ul>
+<h2 id="檢查沒通過時">檢查沒通過時</h2>
+<p><code>predict()</code> 會丟出 <code>InputValidationError</code>，這一輪不會預測；範例程式會印出原因，結束碼為 99。一次只回報第一個問題，<code>error.as_dict()</code> 的內容：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>鍵</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>code</code></td>
+<td>錯誤碼，見下表</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>說明</td>
+</tr>
+<tr>
+<td><code>field</code></td>
+<td>出問題的欄位；沒有特定欄位時為 <code>None</code></td>
+</tr>
+<tr>
+<td><code>row</code></td>
+<td>出問題的列號，從 0 起算（第 1 列是 0）；沒有特定列時為 <code>None</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>例如少了一列，或第 31 列的 Past10Min 留下沒處理的 -99：</p>
+<pre><code class="language-python">{'code': 'ROW_COUNT', 'message': 'Expected exactly 60 rows, got 59', 'field': None, 'row': None}
+{'code': 'NEGATIVE_RAINFALL', 'message': 'Value must be nonnegative; prepare negative source values upstream', 'field': 'Past10Min', 'row': 30}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>錯誤碼</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MISSING_COLUMNS</code>、<code>EXTRA_COLUMNS</code>、<code>DUPLICATE_COLUMNS</code></td>
+<td>欄位缺少、多出或重複</td>
+</tr>
+<tr>
+<td><code>ROW_COUNT</code></td>
+<td>不是剛好 60 列</td>
+</tr>
+<tr>
+<td><code>TIMESTAMP_FORMAT</code>、<code>TIMESTAMP_MISSING</code>、<code>MINUTE_ALIGNMENT</code></td>
+<td>時間格式不對、時間空白、時間不在整分鐘</td>
+</tr>
+<tr>
+<td><code>DUPLICATE_TIMES</code>、<code>TIME_ORDER</code>、<code>TIME_GAP</code></td>
+<td>時間重複、沒有由舊到新、相鄰兩列不是相隔 1 分鐘</td>
+</tr>
+<tr>
+<td><code>NUMERIC_TYPE</code>、<code>NONFINITE_VALUE</code>、<code>NUMERIC_RANGE</code></td>
+<td>不是數字、有空值或無限大、數值過大</td>
+</tr>
+<tr>
+<td><code>NEGATIVE_WATER_LEVEL</code>、<code>NEGATIVE_RAINFALL</code>、<code>NEGATIVE_GATE</code></td>
+<td>水位、雨量、閘門出現負數</td>
+</tr>
+<tr>
+<td><code>INPUT_TYPE</code></td>
+<td>input 不是 pandas DataFrame</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="找不到可預測的-t-時">找不到可預測的 t 時</h2>
+<p>只有 <code>forecast_from_table.py</code> 會發生。<code>forecast()</code> 會丟出 <code>NoForecastTimeError</code>，這一輪不會預測；範例程式會印出原因，結束碼為 98。原因有三種：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>印出的訊息（例）</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>No minute with a measured HL01 between 2024-10-31 10:51:00 and 2024-10-31 11:05:00</code></td>
+<td>沒給 t：往前 14 分鐘內找不到 HL01 是實測值的分鐘，或分鐘表停在更早的時間</td>
+</tr>
+<tr>
+<td><code>2024-10-31 12:00:00 is not in the minute table</code></td>
+<td>指定的 t 不在分鐘表裡</td>
+</tr>
+<tr>
+<td><code>HL01 at 2024-10-31 10:30:00 is not a measured value</code></td>
+<td>指定的 t 的 HL01 不是實測值</td>
+</tr>
+</tbody>
+</table></div>
+</main>
+</body>
+</html>

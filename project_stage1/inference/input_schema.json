@@ -1,0 +1,36 @@
+{
+  "seq_len": 60,
+  "frequency_seconds": 60,
+  "timestamp_column": "date",
+  "timestamp_format": "%Y-%m-%d %H:%M:%S",
+  "columns": [
+    "date",
+    "HL01",
+    "HL02",
+    "HL03",
+    "HL04",
+    "HL05",
+    "HL06",
+    "Past10Min",
+    "Past1Hr",
+    "north_gate_opening_1",
+    "north_gate_opening_2",
+    "north_gate_opening_3",
+    "south_gate_opening_1",
+    "south_gate_opening_2",
+    "south_gate_opening_3"
+  ],
+  "anchor_column": "HL01",
+  "nonnegative_columns": {
+    "water_level": ["HL01", "HL02", "HL03", "HL04", "HL05", "HL06"],
+    "rainfall": ["Past10Min", "Past1Hr"],
+    "gate": [
+      "north_gate_opening_1",
+      "north_gate_opening_2",
+      "north_gate_opening_3",
+      "south_gate_opening_1",
+      "south_gate_opening_2",
+      "south_gate_opening_3"
+    ]
+  }
+}

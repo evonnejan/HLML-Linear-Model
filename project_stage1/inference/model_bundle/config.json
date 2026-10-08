@@ -1,0 +1,26 @@
+{
+  "seq_len": 60,
+  "pred_len": 15,
+  "dlinear_kernel_size": 25,
+  "flatten_fusion": true,
+  "fusion_hidden_dim": 32,
+  "exog_emb_dim": 16,
+  "dropout": 0.1,
+  "branch_features": [
+    "HL02",
+    "HL03",
+    "HL04",
+    "HL05",
+    "HL06"
+  ],
+  "exog_features": [
+    "Past10Min",
+    "Past1Hr",
+    "north_gate_opening_1",
+    "north_gate_opening_2",
+    "north_gate_opening_3",
+    "south_gate_opening_1",
+    "south_gate_opening_2",
+    "south_gate_opening_3"
+  ]
+}
